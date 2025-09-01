@@ -2,7 +2,7 @@
 
 #include <vector>
 #include <map>
-#include <queue>
+#include <deque>
 #include <set>
 #include "SchedulingPolicy.hpp"
 #include <Satellite.hpp>
@@ -11,8 +11,7 @@
 
 class FIFOPolicy : public SchedulingPolicy {
 private:
-    mutable std::map<uint32_t, std::queue<uint32_t>> gndId2SatQueue;
-    mutable std::map<uint32_t, std::set<uint32_t>> gndId2SatInQueue;
+    mutable std::map<uint32_t, std::deque<uint32_t>> gndId2SatQueue;
     
 public:
     std::string getPolicyName() override {
@@ -29,8 +28,8 @@ public:
         uint64_t stepCount
     ) override {
         
-        // True FIFO: If we have a current satellite, only switch if it's done or out of view
-        if(currentSat != NULL) {
+        // FIFO: Stick with current satellite until it's done or out of view
+        if(currentSat != nullptr) {
             bool currentSatVisible = false;
             for(const auto* sat : visibleSats) {
                 if(sat == currentSat) {
@@ -50,42 +49,51 @@ public:
             // If we reach here, current satellite is either out of view or done with data
         }
         
-        // Add new visible satellites to the queue
-        for(const auto* sat : visibleSats) {
-            uint32_t satId = sat->getID();
-            if(gndId2SatInQueue[groundStationId].find(satId) == gndId2SatInQueue[groundStationId].end()) {
-                gndId2SatQueue[groundStationId].push(satId);
-                gndId2SatInQueue[groundStationId].insert(satId);
-            }
-        }
+        // Get queue for this ground station
+        auto& satQueue = gndId2SatQueue[groundStationId];
         
-        // Remove satellites that are no longer visible from the tracking set
+        // Create set of visible satellite IDs for efficient lookup
         std::set<uint32_t> visibleSatIds;
         for(const auto* sat : visibleSats) {
             visibleSatIds.insert(sat->getID());
         }
         
-        auto& satInQueue = gndId2SatInQueue[groundStationId];
-        for(auto it = satInQueue.begin(); it != satInQueue.end();) {
-            if(visibleSatIds.find(*it) == visibleSatIds.end()) {
-                it = satInQueue.erase(it);
-            } else {
-                ++it;
+        // Add new visible satellites to back of queue
+        for(const auto* sat : visibleSats) {
+            uint32_t satId = sat->getID();
+            
+            // Check if already in queue (O(n) but queues are small)
+            bool alreadyInQueue = false;
+            for(const auto& queuedId : satQueue) {
+                if(queuedId == satId) {
+                    alreadyInQueue = true;
+                    break;
+                }
+            }
+            
+            if(!alreadyInQueue) {
+                satQueue.push_back(satId);  // Add to back (FIFO order)
             }
         }
         
-        // Process queue to find next satellite with buffered data
-        while(!gndId2SatQueue[groundStationId].empty()) {
-            uint32_t frontSatId = gndId2SatQueue[groundStationId].front();
-            gndId2SatQueue[groundStationId].pop();
+        // Process queue from front, removing invalid entries
+        while(!satQueue.empty()) {
+            uint32_t frontSatId = satQueue.front();
+            satQueue.pop_front();
+            
+            // Skip if satellite is no longer visible
+            if(visibleSatIds.find(frontSatId) == visibleSatIds.end()) {
+                continue;  // Remove from queue and try next
+            }
             
             // Find the satellite object and check if it has data
             for(const auto* sat : visibleSats) {
                 if(sat->getID() == frontSatId) {
-                    const uint64_t BUF = satId2Sensor.at(frontSatId)->getBitsBuffered();
-                    if(BUF > 0) {
+                    const uint64_t buffered = satId2Sensor.at(frontSatId)->getBitsBuffered();
+                    if(buffered > 0) {
                         return const_cast<cote::Satellite*>(sat);
                     }
+                    break;  // Found satellite but no data, continue to next
                 }
             }
         }
