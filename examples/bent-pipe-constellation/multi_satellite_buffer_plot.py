@@ -257,13 +257,122 @@ def plot_multi_satellite_buffer_comparison(output_dir):
     
     print(f"\nFixed multi-satellite buffer comparison plot saved!")
 
+def run_simulations_if_needed():
+    """Run simulations if logs are missing or incomplete"""
+    import subprocess
+    import os
+    
+    missing_policies = []
+    
+    # Check which policies are missing
+    for policy in POLICIES:
+        policy_dir = LOGS_DIR / policy
+        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
+        if not tx_rx_file.exists():
+            missing_policies.append(policy)
+    
+    if missing_policies:
+        print(f"Missing logs for policies: {missing_policies}")
+        print("Attempting to run simulations...")
+        
+        # Check if we're in the right directory and have the build system
+        build_dir = Path("build")
+        bent_pipe_exe = build_dir / "bent_pipe"
+        config_dir = Path("configuration")
+        
+        if not build_dir.exists():
+            print("Error: build/ directory not found. Please run from the bent-pipe-constellation directory.")
+            return False
+            
+        if not config_dir.exists():
+            print("Error: configuration/ directory not found. Please run from the bent-pipe-constellation directory.")
+            return False
+        
+        # Try to build if executable doesn't exist
+        if not bent_pipe_exe.exists():
+            print("Building simulation executable...")
+            try:
+                result = subprocess.run(["make"], cwd=build_dir, capture_output=True, text=True)
+                if result.returncode != 0:
+                    print(f"Build failed: {result.stderr}")
+                    return False
+                print("Build successful!")
+            except Exception as e:
+                print(f"Build error: {e}")
+                return False
+        
+        # Run simulations for missing policies
+        for policy in missing_policies:
+            print(f"Running {policy} simulation...")
+            
+            # Create policy log directory
+            policy_log_dir = LOGS_DIR / policy
+            policy_log_dir.mkdir(parents=True, exist_ok=True)
+            
+            try:
+                # Run the simulation
+                result = subprocess.run([
+                    str(bent_pipe_exe),
+                    str(config_dir),
+                    str(policy_log_dir)
+                ], capture_output=True, text=True, timeout=300)  # 5 minute timeout
+                
+                if result.returncode != 0:
+                    print(f"Simulation failed for {policy}: {result.stderr}")
+                    continue
+                
+                # Check if the simulation created a subdirectory (common issue)
+                subdirs = [d for d in policy_log_dir.iterdir() if d.is_dir()]
+                if subdirs:
+                    # Move files from subdirectory to main directory
+                    subdir = subdirs[0]
+                    for file in subdir.iterdir():
+                        if file.is_file():
+                            file.rename(policy_log_dir / file.name)
+                    subdir.rmdir()
+                
+                print(f"✓ {policy} simulation completed")
+                
+            except subprocess.TimeoutExpired:
+                print(f"✗ {policy} simulation timed out (>5 minutes)")
+            except Exception as e:
+                print(f"✗ {policy} simulation error: {e}")
+        
+        return True
+    
+    return True  # No missing policies
+
 def main():
     print("MULTI-SATELLITE BUFFER COMPARISON")
     print("==================================")
     
+    # Check if logs exist, if not try to run simulations
     if not LOGS_DIR.exists():
-        print(f"Error: Logs directory {LOGS_DIR} does not exist!")
+        print(f"Logs directory {LOGS_DIR} does not exist. Creating and running simulations...")
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        if not run_simulations_if_needed():
+            print("Failed to generate simulation data. Please run simulations manually.")
+            return
+    else:
+        # Check if we have all policy logs
+        if not run_simulations_if_needed():
+            print("Failed to generate missing simulation data. Please run simulations manually.")
+            return
+    
+    # Verify we have at least some logs after attempting to run simulations
+    available_policies = []
+    for policy in POLICIES:
+        policy_dir = LOGS_DIR / policy
+        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
+        if tx_rx_file.exists():
+            available_policies.append(policy)
+    
+    if not available_policies:
+        print("Error: No simulation logs found even after attempting to run simulations.")
+        print("Please check that you're in the correct directory and that the build system works.")
         return
+    
+    print(f"Found logs for policies: {available_policies}")
     
     # Create output directory
     output_dir = Path("orbital_analysis_output")
@@ -272,7 +381,7 @@ def main():
     # Create the comparison plot
     plot_multi_satellite_buffer_comparison(output_dir)
     
-    print(f"\nAnalysis complete! Check {output_dir}/multi_satellite_buffer_comparison.png")
+    print(f"\nAnalysis complete! Check {output_dir}/multi_satellite_buffer_comparison_fixed.png")
 
 if __name__ == "__main__":
     main()
