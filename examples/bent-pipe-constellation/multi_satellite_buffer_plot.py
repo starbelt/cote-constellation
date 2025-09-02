@@ -34,6 +34,22 @@ def read_config():
                     if i < len(values) and key == 'bits-per-sense':
                         config['mb_per_sense'] = int(values[i]) / (8 * 1024 * 1024)
     
+    # Constellation config
+    constellation_file = SCRIPT_DIR / "configuration/constellation.dat"
+    if constellation_file.exists():
+        with open(constellation_file, 'r') as f:
+            lines = f.readlines()
+            if len(lines) >= 2:
+                header = lines[0].strip().split(',')
+                values = lines[1].strip().split(',')
+                for i, key in enumerate(header):
+                    if i < len(values):
+                        if key == 'count':
+                            config['satellite_count'] = int(values[i])
+                        elif key == 'second':
+                            # Frame spacing in seconds
+                            config['frame_spacing'] = float(values[i]) + float(values[i+1]) / 1e9 if i+1 < len(values) else float(values[i])
+    
     return config
 
 def get_policy_dirs():
@@ -95,6 +111,27 @@ def get_top_satellites():
     
     return [sat for sat, _ in top_sats], all_totals
 
+def get_global_time_reference():
+    """Get global minimum timestamp across all policies for consistent time reference"""
+    policy_dirs = get_policy_dirs()
+    min_timestamp = None
+    
+    for policy_dir in policy_dirs.values():
+        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
+        if not tx_rx_file.exists():
+            continue
+            
+        df = pd.read_csv(tx_rx_file)
+        df = df.iloc[:, :2]
+        df.columns = ["timestamp", "satellite"]
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        
+        file_min = df["timestamp"].min()
+        if min_timestamp is None or file_min < min_timestamp:
+            min_timestamp = file_min
+    
+    return min_timestamp
+
 def load_buffer_data(policy, satellite_id):
     """Load buffer data for satellite"""
     sat_num = satellite_id.split("-")[0] if "-" in satellite_id else satellite_id
@@ -112,14 +149,18 @@ def load_buffer_data(policy, satellite_id):
     df = df.iloc[:, :2]
     df.columns = ["timestamp", "buffer_mb"]
     df["timestamp"] = pd.to_datetime(df["timestamp"])
-    df["hours"] = (df["timestamp"] - df["timestamp"].min()).dt.total_seconds() / 3600
+    
+    # Use global time reference for consistent hours across all policies
+    global_min_time = get_global_time_reference()
+    df["hours"] = (df["timestamp"] - global_min_time).dt.total_seconds() / 3600
     df["buffer_mb"] = pd.to_numeric(df["buffer_mb"], errors='coerce')
     
     return df
 
 def get_orbital_passes():
-    """Get orbital pass times"""
+    """Get orbital pass times using global time reference"""
     policy_dirs = get_policy_dirs()
+    global_min_time = get_global_time_reference()
     
     for policy_dir in policy_dirs.values():
         tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
@@ -131,7 +172,9 @@ def get_orbital_passes():
         df = df.iloc[:, :2]
         df.columns = ["timestamp", "satellite"]
         df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df["hours"] = (df["timestamp"] - df["timestamp"].min()).dt.total_seconds() / 3600
+        
+        # Use global time reference for consistent hours across all policies
+        df["hours"] = (df["timestamp"] - global_min_time).dt.total_seconds() / 3600
         
         active_times = sorted(df[df["satellite"].notnull()]["hours"].tolist())
         if not active_times:
@@ -164,9 +207,23 @@ def create_plot():
         return
     
     fig, axes = plt.subplots(2, 2, figsize=(20, 16))
-    title = f'Buffer Levels - Top {TOP_N} Satellites'
-    if config.get('mb_per_sense'):
-        title += f'\nConfig: {config["mb_per_sense"]:.2f} MB/image'
+    
+    # Create enhanced title
+    title_lines = ["Satellite Constellation Buffer Analysis"]
+    
+    # Add constellation parameters
+    sat_count = config.get('satellite_count', 'Unknown')
+    frame_spacing = config.get('frame_spacing')
+    mb_per_sense = config.get('mb_per_sense')
+    
+    if sat_count != 'Unknown' and frame_spacing and mb_per_sense:
+        title_lines.append(f"{sat_count} Satellites | Frame Rate: 1 image/{frame_spacing:.1f}s | Image Size: {mb_per_sense:.2f} MB")
+    elif mb_per_sense:
+        title_lines.append(f"Image Size: {mb_per_sense:.2f} MB")
+    
+    title_lines.append(f"Top {TOP_N} Most Active Satellites by Data Volume")
+    
+    title = '\n'.join(title_lines)
     fig.suptitle(title, fontsize=16, fontweight='bold')
     
     colors = plt.cm.tab20(np.linspace(0, 1, len(top_satellites)))
