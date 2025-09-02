@@ -10,9 +10,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
+import zipfile
 
-# Configuration
-LOGS_DIR = Path("logs")
+# Configuration - use absolute paths
+SCRIPT_DIR = Path(__file__).parent.absolute()
+LOGS_DIR = SCRIPT_DIR / "logs"
 POLICIES = ["greedy", "fifo", "roundrobin", "random"]
 TOP_N = 15
 
@@ -20,8 +22,8 @@ def read_config():
     """Read simulation configuration"""
     config = {}
     
-    # Sensor config
-    sensor_file = Path("configuration/sensor.dat")
+    # Sensor config - use absolute path
+    sensor_file = SCRIPT_DIR / "configuration/sensor.dat"
     if sensor_file.exists():
         with open(sensor_file, 'r') as f:
             lines = f.readlines()
@@ -38,27 +40,9 @@ def get_policy_dirs():
     """Get policy directories"""
     dirs = {}
     for policy in POLICIES:
-        # Look for numbered directories first (latest run)
-        max_run = -1
-        latest_dir = None
-        
-        if LOGS_DIR.exists():
-            for item in LOGS_DIR.iterdir():
-                if item.is_dir() and item.name.startswith(policy):
-                    suffix = item.name[len(policy):]
-                    if suffix.isdigit():
-                        run_num = int(suffix)
-                        if run_num > max_run:
-                            max_run = run_num
-                            latest_dir = item
-        
-        if latest_dir:
-            dirs[policy] = latest_dir
-        else:
-            # Fallback to basic directory name
-            policy_dir = LOGS_DIR / policy
-            if policy_dir.exists():
-                dirs[policy] = policy_dir
+        policy_dir = LOGS_DIR / policy
+        if policy_dir.exists():
+            dirs[policy] = policy_dir
     return dirs
 
 def get_top_satellites():
@@ -91,7 +75,7 @@ def get_top_satellites():
         # Calculate totals per satellite
         for _, row in tx_rx_df.iterrows():
             sat = row["satellite"]
-            if sat == "None" or pd.isna(sat):
+            if pd.isna(sat):
                 continue
                 
             mbps_row = mbps_df[mbps_df["timestamp"] == row["timestamp"]]
@@ -149,7 +133,7 @@ def get_orbital_passes():
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df["hours"] = (df["timestamp"] - df["timestamp"].min()).dt.total_seconds() / 3600
         
-        active_times = sorted(df[df["satellite"] != "None"]["hours"].tolist())
+        active_times = sorted(df[df["satellite"].notnull()]["hours"].tolist())
         if not active_times:
             continue
             
@@ -200,13 +184,14 @@ def create_plot():
             
             buffer_df = load_buffer_data(policy, sat_id)
             if buffer_df is None:
+                # No buffer data file found - use dashed line at zero
                 line = ax.axhline(0, color=colors[j], alpha=0.3, linestyle='--')
                 legend_data.append((sat_total, line, f'Sat {sat_num} (0MB)'))
             else:
-                style = 'solid' if sat_total > 0 else 'dashed'
-                alpha = 0.8 if sat_total > 0 else 0.3
+                # Buffer data exists - always use solid line, adjust alpha based on data amount
+                alpha = 0.8 if sat_total > 0 else 0.4
                 line = ax.plot(buffer_df['hours'], buffer_df['buffer_mb'], 
-                       color=colors[j], linewidth=1.5, alpha=alpha, linestyle=style)[0]
+                       color=colors[j], linewidth=1.5, alpha=alpha, linestyle='solid')[0]
                 legend_data.append((sat_total, line, f'Sat {sat_num} ({sat_total:.0f}MB)'))
         
         # Add orbital passes
@@ -224,16 +209,35 @@ def create_plot():
         ax.grid(True, alpha=0.3)
         ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
     
-    # Save plot
+    # Save plot - use absolute paths for output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = Path(f"buffer_analysis_{timestamp}")
+    output_dir = SCRIPT_DIR / f"buffer_analysis_{timestamp}"
     output_dir.mkdir(exist_ok=True)
     
     plt.tight_layout()
     plt.savefig(output_dir / "buffer_comparison.png", dpi=300, bbox_inches='tight')
     plt.close()
     
+    # Create log archive
+    create_log_archive(output_dir)
+    
     print(f"Analysis complete! Generated plot with {len(passes)} orbital passes -> {output_dir}/buffer_comparison.png")
+
+def create_log_archive(output_dir):
+    """Create a zip archive of all simulation logs"""
+    archive_path = output_dir / "simulation_logs.zip"
+    
+    with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for policy in POLICIES:
+            policy_dir = LOGS_DIR / policy
+            if policy_dir.exists():
+                for log_file in policy_dir.glob("*.csv"):
+                    # Add file to zip with policy folder structure
+                    arcname = f"{policy}/{log_file.name}"
+                    zipf.write(log_file, arcname)
+    
+    print(f"Created log archive: {archive_path}")
+    return archive_path
 
 def main():
     """Main function"""
@@ -242,6 +246,7 @@ def main():
     policy_dirs = get_policy_dirs()
     if not policy_dirs:
         print("No simulation logs found!")
+        print("Please run simulations first using the scripts in the scripts/ directory.")
         return
     
     create_plot()
