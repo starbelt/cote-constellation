@@ -2,386 +2,249 @@
 """
 Multi-Satellite Buffer Analysis
 
-Plot buffer levels over time for the top 10 satellites for each policy,
-with orbital passes shaded in green.
+Simple buffer level comparison across scheduling policies.
 """
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+from datetime import datetime
 
 # Configuration
 LOGS_DIR = Path("logs")
 POLICIES = ["greedy", "fifo", "roundrobin", "random"]
-TOP_N_SATELLITES = 10
+TOP_N = 15
 
-def get_top_satellites_by_policy(policy, top_n=10):
-    """Get the top N satellites by total data downloaded for a policy"""
-    policy_dir = LOGS_DIR / policy
-    tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-    mbps_file = policy_dir / "meas-downlink-Mbps.csv"
+def read_config():
+    """Read simulation configuration"""
+    config = {}
     
-    if not tx_rx_file.exists() or not mbps_file.exists():
-        print(f"Warning: Log files not found for {policy} policy")
-        return []
+    # Sensor config
+    sensor_file = Path("configuration/sensor.dat")
+    if sensor_file.exists():
+        with open(sensor_file, 'r') as f:
+            lines = f.readlines()
+            if len(lines) >= 2:
+                header = lines[0].strip().split(',')
+                values = lines[1].strip().split(',')
+                for i, key in enumerate(header):
+                    if i < len(values) and key == 'bits-per-sense':
+                        config['mb_per_sense'] = int(values[i]) / (8 * 1024 * 1024)
     
-    # Load connection and throughput data
-    tx_rx_df = pd.read_csv(tx_rx_file)
-    mbps_df = pd.read_csv(mbps_file)
+    return config
+
+def get_policy_dirs():
+    """Get policy directories"""
+    dirs = {}
+    for policy in POLICIES:
+        # Look for numbered directories first (latest run)
+        max_run = -1
+        latest_dir = None
+        
+        if LOGS_DIR.exists():
+            for item in LOGS_DIR.iterdir():
+                if item.is_dir() and item.name.startswith(policy):
+                    suffix = item.name[len(policy):]
+                    if suffix.isdigit():
+                        run_num = int(suffix)
+                        if run_num > max_run:
+                            max_run = run_num
+                            latest_dir = item
+        
+        if latest_dir:
+            dirs[policy] = latest_dir
+        else:
+            # Fallback to basic directory name
+            policy_dir = LOGS_DIR / policy
+            if policy_dir.exists():
+                dirs[policy] = policy_dir
+    return dirs
+
+def get_top_satellites():
+    """Get top satellites by usage across all policies"""
+    policy_dirs = get_policy_dirs()
+    all_totals = {}
     
-    # Handle CSV structure
-    if 'time' in tx_rx_df.columns:
-        tx_rx_df = tx_rx_df[['time', 'downlink-tx-rx']]
+    for policy, policy_dir in policy_dirs.items():
+        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
+        mbps_file = policy_dir / "meas-downlink-Mbps.csv"
+        
+        if not (tx_rx_file.exists() and mbps_file.exists()):
+            continue
+            
+        tx_rx_df = pd.read_csv(tx_rx_file)
+        mbps_df = pd.read_csv(mbps_file)
+        
+        # Handle CSV structure - keep only the first 2 columns
+        tx_rx_df = tx_rx_df.iloc[:, :2]
+        mbps_df = mbps_df.iloc[:, :2]
+        
+        # Standardize columns
         tx_rx_df.columns = ["timestamp", "satellite"]
-        mbps_df = mbps_df[['time', 'downlink-Mbps']]
         mbps_df.columns = ["timestamp", "mbps"]
-    else:
-        tx_rx_df.columns = ["timestamp", "satellite"]
-        mbps_df.columns = ["timestamp", "mbps"]
-    
-    # Convert timestamps
-    tx_rx_df["timestamp"] = pd.to_datetime(tx_rx_df["timestamp"])
-    mbps_df["timestamp"] = pd.to_datetime(mbps_df["timestamp"])
-    mbps_df["mbps"] = pd.to_numeric(mbps_df["mbps"], errors='coerce')
-    
-    # Calculate total data per satellite
-    satellite_totals = {}
-    
-    for i, row in tx_rx_df.iterrows():
-        sat = row["satellite"]
-        if sat != "None":
-            # Find corresponding throughput
+        
+        tx_rx_df["timestamp"] = pd.to_datetime(tx_rx_df["timestamp"])
+        mbps_df["timestamp"] = pd.to_datetime(mbps_df["timestamp"])
+        mbps_df["mbps"] = pd.to_numeric(mbps_df["mbps"], errors='coerce')
+        
+        # Calculate totals per satellite
+        for _, row in tx_rx_df.iterrows():
+            sat = row["satellite"]
+            if sat == "None" or pd.isna(sat):
+                continue
+                
             mbps_row = mbps_df[mbps_df["timestamp"] == row["timestamp"]]
             if not mbps_row.empty:
                 mbps = mbps_row.iloc[0]["mbps"]
-                data_mb = mbps * 100 / 8  # Convert to MB (100s time step, 8 bits/byte)
-                
-                if sat not in satellite_totals:
-                    satellite_totals[sat] = 0
-                satellite_totals[sat] += data_mb
+                if pd.notna(mbps):
+                    data_mb = mbps * 100 / 8  # 100s timestep
+                    if sat not in all_totals:
+                        all_totals[sat] = {}
+                    if policy not in all_totals[sat]:
+                        all_totals[sat][policy] = 0
+                    all_totals[sat][policy] += data_mb
     
-    # Get top N satellites
-    sorted_sats = sorted(satellite_totals.items(), key=lambda x: x[1], reverse=True)
-    top_satellites = [sat_id for sat_id, _ in sorted_sats[:top_n]]
+    # Get top satellites by max usage
+    sat_max = {sat: max(policies.values()) for sat, policies in all_totals.items()}
+    top_sats = sorted(sat_max.items(), key=lambda x: x[1], reverse=True)[:TOP_N]
     
-    print(f"{policy}: Top {top_n} satellites by data downloaded:")
-    for i, (sat_id, total_mb) in enumerate(sorted_sats[:top_n]):
-        print(f"  {i+1:2d}. {sat_id:15s}: {total_mb:6.0f} MB")
-    
-    return top_satellites
+    return [sat for sat, _ in top_sats], all_totals
 
-def load_satellite_buffer_data(policy, satellite_id):
-    """Load buffer data for a specific satellite"""
-    # Extract numeric satellite ID from string like "60518000-0"
-    if isinstance(satellite_id, str) and "-" in satellite_id:
-        sat_num = satellite_id.split("-")[0]
-    else:
-        sat_num = str(satellite_id)
+def load_buffer_data(policy, satellite_id):
+    """Load buffer data for satellite"""
+    sat_num = satellite_id.split("-")[0] if "-" in satellite_id else satellite_id
+    policy_dirs = get_policy_dirs()
     
-    policy_dir = LOGS_DIR / policy
-    buffer_file = policy_dir / f"meas-MB-buffered-sat-{int(sat_num):010d}.csv"
-    
-    if not buffer_file.exists():
-        print(f"Warning: Buffer file not found for satellite {sat_num} in {policy} policy")
+    if policy not in policy_dirs:
         return None
-    
-    # Load buffer data
-    buffer_df = pd.read_csv(buffer_file)
-    
-    if 'time' in buffer_df.columns:
-        buffer_col = [col for col in buffer_df.columns if 'MB-buffered' in col][0]
-        buffer_df = buffer_df[['time', buffer_col]]
-        buffer_df.columns = ["timestamp", "buffer_mb"]
-    else:
-        buffer_df.columns = ["timestamp", "buffer_mb"]
-    
-    # Convert timestamp to datetime, then to numeric hours since start
-    buffer_df["timestamp"] = pd.to_datetime(buffer_df["timestamp"])
-    start_time = buffer_df["timestamp"].min()
-    buffer_df["hours"] = (buffer_df["timestamp"] - start_time).dt.total_seconds() / 3600
-    buffer_df["buffer_mb"] = pd.to_numeric(buffer_df["buffer_mb"], errors='coerce')
-    
-    return buffer_df
-
-def get_all_satellites_across_policies():
-    """Get all satellites that appear in any policy's connection logs"""
-    all_satellites = set()
-    
-    for policy in POLICIES:
-        policy_dir = LOGS_DIR / policy
-        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
         
+    buffer_file = policy_dirs[policy] / f"meas-MB-buffered-sat-{int(sat_num):010d}.csv"
+    if not buffer_file.exists():
+        return None
+        
+    df = pd.read_csv(buffer_file)
+    # Keep only first 2 columns
+    df = df.iloc[:, :2]
+    df.columns = ["timestamp", "buffer_mb"]
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df["hours"] = (df["timestamp"] - df["timestamp"].min()).dt.total_seconds() / 3600
+    df["buffer_mb"] = pd.to_numeric(df["buffer_mb"], errors='coerce')
+    
+    return df
+
+def get_orbital_passes():
+    """Get orbital pass times"""
+    policy_dirs = get_policy_dirs()
+    
+    for policy_dir in policy_dirs.values():
+        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
         if not tx_rx_file.exists():
             continue
             
-        tx_rx_df = pd.read_csv(tx_rx_file)
+        df = pd.read_csv(tx_rx_file)
+        # Keep only first 2 columns
+        df = df.iloc[:, :2]
+        df.columns = ["timestamp", "satellite"]
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df["hours"] = (df["timestamp"] - df["timestamp"].min()).dt.total_seconds() / 3600
         
-        if 'time' in tx_rx_df.columns:
-            tx_rx_df = tx_rx_df[['time', 'downlink-tx-rx']]
-            tx_rx_df.columns = ["timestamp", "satellite"]
-        else:
-            tx_rx_df.columns = ["timestamp", "satellite"]
-        
-        # Get unique satellites (excluding None)
-        policy_satellites = set(tx_rx_df[tx_rx_df["satellite"] != "None"]["satellite"].unique())
-        all_satellites.update(policy_satellites)
-    
-    return sorted(list(all_satellites))
-
-def get_satellite_orbital_passes_all_policies(satellite_id):
-    """Get orbital pass times for a satellite across all policies (should be the same)"""
-    # Use the first available policy to determine orbital passes
-    # (they should be the same across all policies since orbital mechanics don't change)
-    
-    for policy in POLICIES:
-        policy_dir = LOGS_DIR / policy
-        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-        
-        if not tx_rx_file.exists():
+        active_times = sorted(df[df["satellite"] != "None"]["hours"].tolist())
+        if not active_times:
             continue
-        
-        tx_rx_df = pd.read_csv(tx_rx_file)
-        
-        if 'time' in tx_rx_df.columns:
-            tx_rx_df = tx_rx_df[['time', 'downlink-tx-rx']]
-            tx_rx_df.columns = ["timestamp", "satellite"]
-        else:
-            tx_rx_df.columns = ["timestamp", "satellite"]
-        
-        tx_rx_df["timestamp"] = pd.to_datetime(tx_rx_df["timestamp"])
-        start_time = tx_rx_df["timestamp"].min()
-        tx_rx_df["hours"] = (tx_rx_df["timestamp"] - start_time).dt.total_seconds() / 3600
-        
-        # Check if this satellite appears in this policy
-        sat_connections = tx_rx_df[tx_rx_df["satellite"] == satellite_id].copy()
-        
-        if not sat_connections.empty:
-            # Found the satellite in this policy, determine its orbital passes
-            passes = []
-            current_pass_start = None
-            last_time = None
             
-            for _, row in sat_connections.iterrows():
-                current_time = row["hours"]
-                
-                if last_time is None or (current_time - last_time) > 0.5:  # Gap of more than 0.5 hours indicates new orbital pass
-                    # Start new pass
-                    if current_pass_start is not None:
-                        passes.append((current_pass_start, last_time))
-                    current_pass_start = current_time
-                
-                last_time = current_time
+        # Group into passes
+        passes = []
+        start, last = None, None
+        for time in active_times:
+            if last is None or (time - last) > 0.5:  # 30min gap
+                if start is not None:
+                    passes.append((start, last))
+                start = time
+            last = time
+        if start is not None:
+            passes.append((start, last))
             
-            # Close final pass
-            if current_pass_start is not None:
-                passes.append((current_pass_start, last_time))
-            
-            return passes
+        return passes
     
-    return []  # Satellite not found in any policy
+    return []
 
-def plot_multi_satellite_buffer_comparison(output_dir):
-    """Create buffer comparison plot for top satellites across all policies"""
+def create_plot():
+    """Create buffer comparison plot"""
+    config = read_config()
+    top_satellites, all_totals = get_top_satellites()
+    passes = get_orbital_passes()
     
-    # Get all satellites that appear across all policies
-    all_satellites = get_all_satellites_across_policies()
-    print(f"Found {len(all_satellites)} total satellites across all policies")
-    print(f"Satellites: {all_satellites}")
-    
-    # Use the first 10 satellites (or all if fewer than 10)
-    selected_satellites = all_satellites[:TOP_N_SATELLITES]
-    print(f"Selected {len(selected_satellites)} satellites for comparison: {selected_satellites}")
+    if not top_satellites:
+        print("No satellite data found!")
+        return
     
     fig, axes = plt.subplots(2, 2, figsize=(20, 16))
-    fig.suptitle(f'Buffer Levels Over Time - Same {len(selected_satellites)} Satellites Across All Policies\n(Green = Orbital Passes)', 
-                 fontsize=16, fontweight='bold')
+    title = f'Buffer Levels - Top {TOP_N} Satellites'
+    if config.get('mb_per_sense'):
+        title += f'\nConfig: {config["mb_per_sense"]:.2f} MB/image'
+    fig.suptitle(title, fontsize=16, fontweight='bold')
     
-    colors = plt.cm.tab10(np.linspace(0, 1, len(selected_satellites)))
+    colors = plt.cm.tab20(np.linspace(0, 1, len(top_satellites)))
     
     for i, policy in enumerate(POLICIES):
-        row = i // 2
-        col = i % 2
-        ax = axes[row, col]
+        ax = axes[i // 2, i % 2]
         
-        print(f"\n=== Processing {policy.upper()} policy ===")
+        total_data = 0
+        legend_data = []
         
-        # Plot buffer levels for the selected satellites
-        satellites_plotted = 0
-        for j, satellite_id in enumerate(selected_satellites):
-            color = colors[j]
+        for j, sat_id in enumerate(top_satellites):
+            sat_num = sat_id.split("-")[0] if "-" in sat_id else sat_id
+            sat_total = all_totals.get(sat_id, {}).get(policy, 0)
+            total_data += sat_total
             
-            # Load buffer data
-            buffer_df = load_satellite_buffer_data(policy, satellite_id)
+            buffer_df = load_buffer_data(policy, sat_id)
             if buffer_df is None:
-                print(f"  No buffer data for satellite {satellite_id} in {policy}")
-                continue
-            
-            # Extract satellite number for display
-            if isinstance(satellite_id, str) and "-" in satellite_id:
-                sat_display = satellite_id.split("-")[0]
+                line = ax.axhline(0, color=colors[j], alpha=0.3, linestyle='--')
+                legend_data.append((sat_total, line, f'Sat {sat_num} (0MB)'))
             else:
-                sat_display = str(satellite_id)
-            
-            # Plot buffer level
-            ax.plot(buffer_df['hours'], buffer_df['buffer_mb'], 
-                   color=color, linewidth=1.5, alpha=0.8, 
-                   label=f'Sat {sat_display}')
-            
-            satellites_plotted += 1
+                style = 'solid' if sat_total > 0 else 'dashed'
+                alpha = 0.8 if sat_total > 0 else 0.3
+                line = ax.plot(buffer_df['hours'], buffer_df['buffer_mb'], 
+                       color=colors[j], linewidth=1.5, alpha=alpha, linestyle=style)[0]
+                legend_data.append((sat_total, line, f'Sat {sat_num} ({sat_total:.0f}MB)'))
         
-        # Add orbital passes for all selected satellites (should be the same regardless of policy)
-        print(f"  Adding orbital passes...")
-        pass_times_added = set()  # To avoid duplicate shading
-        for satellite_id in selected_satellites:
-            passes = get_satellite_orbital_passes_all_policies(satellite_id)
-            for pass_start, pass_end in passes:
-                pass_key = (round(pass_start, 2), round(pass_end, 2))
-                if pass_key not in pass_times_added:
-                    ax.axvspan(pass_start, pass_end, alpha=0.1, color='green')
-                    pass_times_added.add(pass_key)
+        # Add orbital passes
+        for start, end in passes:
+            ax.axvspan(start, end, alpha=0.1, color='green')
         
-        # Add a single label for orbital passes
-        if pass_times_added:
-            ax.axvspan(0, 0, alpha=0.0, color='green', label=f'Orbital Passes ({len(pass_times_added)})')
+        # Sort legend by data amount (highest first)
+        legend_data.sort(key=lambda x: x[0], reverse=True)
+        handles = [item[1] for item in legend_data]
+        labels = [item[2] for item in legend_data]
         
         ax.set_xlabel('Time (hours)')
         ax.set_ylabel('Buffer (MB)')
-        ax.set_title(f'{policy.upper()} Policy ({satellites_plotted} satellites)')
+        ax.set_title(f'{policy.upper()}\nTotal: {total_data:.0f} MB')
         ax.grid(True, alpha=0.3)
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
+        ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
     
-    plt.tight_layout()
-    plt.savefig(output_dir / "multi_satellite_buffer_comparison_fixed.png", dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    print(f"\nFixed multi-satellite buffer comparison plot saved!")
-
-def run_simulations_if_needed():
-    """Run simulations if logs are missing or incomplete"""
-    import subprocess
-    import os
-    
-    missing_policies = []
-    
-    # Check which policies are missing
-    for policy in POLICIES:
-        policy_dir = LOGS_DIR / policy
-        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-        if not tx_rx_file.exists():
-            missing_policies.append(policy)
-    
-    if missing_policies:
-        print(f"Missing logs for policies: {missing_policies}")
-        print("Attempting to run simulations...")
-        
-        # Check if we're in the right directory and have the build system
-        build_dir = Path("build")
-        bent_pipe_exe = build_dir / "bent_pipe"
-        config_dir = Path("configuration")
-        
-        if not build_dir.exists():
-            print("Error: build/ directory not found. Please run from the bent-pipe-constellation directory.")
-            return False
-            
-        if not config_dir.exists():
-            print("Error: configuration/ directory not found. Please run from the bent-pipe-constellation directory.")
-            return False
-        
-        # Try to build if executable doesn't exist
-        if not bent_pipe_exe.exists():
-            print("Building simulation executable...")
-            try:
-                result = subprocess.run(["make"], cwd=build_dir, capture_output=True, text=True)
-                if result.returncode != 0:
-                    print(f"Build failed: {result.stderr}")
-                    return False
-                print("Build successful!")
-            except Exception as e:
-                print(f"Build error: {e}")
-                return False
-        
-        # Run simulations for missing policies
-        for policy in missing_policies:
-            print(f"Running {policy} simulation...")
-            
-            # Create policy log directory
-            policy_log_dir = LOGS_DIR / policy
-            policy_log_dir.mkdir(parents=True, exist_ok=True)
-            
-            try:
-                # Run the simulation
-                result = subprocess.run([
-                    str(bent_pipe_exe),
-                    str(config_dir),
-                    str(policy_log_dir)
-                ], capture_output=True, text=True, timeout=300)  # 5 minute timeout
-                
-                if result.returncode != 0:
-                    print(f"Simulation failed for {policy}: {result.stderr}")
-                    continue
-                
-                # Check if the simulation created a subdirectory (common issue)
-                subdirs = [d for d in policy_log_dir.iterdir() if d.is_dir()]
-                if subdirs:
-                    # Move files from subdirectory to main directory
-                    subdir = subdirs[0]
-                    for file in subdir.iterdir():
-                        if file.is_file():
-                            file.rename(policy_log_dir / file.name)
-                    subdir.rmdir()
-                
-                print(f"✓ {policy} simulation completed")
-                
-            except subprocess.TimeoutExpired:
-                print(f"✗ {policy} simulation timed out (>5 minutes)")
-            except Exception as e:
-                print(f"✗ {policy} simulation error: {e}")
-        
-        return True
-    
-    return True  # No missing policies
-
-def main():
-    print("MULTI-SATELLITE BUFFER COMPARISON")
-    print("==================================")
-    
-    # Check if logs exist, if not try to run simulations
-    if not LOGS_DIR.exists():
-        print(f"Logs directory {LOGS_DIR} does not exist. Creating and running simulations...")
-        LOGS_DIR.mkdir(parents=True, exist_ok=True)
-        if not run_simulations_if_needed():
-            print("Failed to generate simulation data. Please run simulations manually.")
-            return
-    else:
-        # Check if we have all policy logs
-        if not run_simulations_if_needed():
-            print("Failed to generate missing simulation data. Please run simulations manually.")
-            return
-    
-    # Verify we have at least some logs after attempting to run simulations
-    available_policies = []
-    for policy in POLICIES:
-        policy_dir = LOGS_DIR / policy
-        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-        if tx_rx_file.exists():
-            available_policies.append(policy)
-    
-    if not available_policies:
-        print("Error: No simulation logs found even after attempting to run simulations.")
-        print("Please check that you're in the correct directory and that the build system works.")
-        return
-    
-    print(f"Found logs for policies: {available_policies}")
-    
-    # Create output directory
-    output_dir = Path("orbital_analysis_output")
+    # Save plot
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = Path(f"buffer_analysis_{timestamp}")
     output_dir.mkdir(exist_ok=True)
     
-    # Create the comparison plot
-    plot_multi_satellite_buffer_comparison(output_dir)
+    plt.tight_layout()
+    plt.savefig(output_dir / "buffer_comparison.png", dpi=300, bbox_inches='tight')
+    plt.close()
     
-    print(f"\nAnalysis complete! Check {output_dir}/multi_satellite_buffer_comparison_fixed.png")
+    print(f"Analysis complete! Generated plot with {len(passes)} orbital passes -> {output_dir}/buffer_comparison.png")
+
+def main():
+    """Main function"""
+    print("Multi-Satellite Buffer Analysis")
+    
+    policy_dirs = get_policy_dirs()
+    if not policy_dirs:
+        print("No simulation logs found!")
+        return
+    
+    create_plot()
 
 if __name__ == "__main__":
     main()
