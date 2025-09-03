@@ -14,6 +14,7 @@
 // comsim
 #include <DateTime.hpp>  // DateTime
 #include <Log.hpp>       // Log
+#include <LogLevel.hpp>  // LogLevel
 #include <Sensor.hpp>    // Sensor
 
 namespace cote {
@@ -21,6 +22,7 @@ namespace cote {
    const std::array<double,3>& eciPosn, const DateTime* const globalTime,
    const uint32_t& id, Log* const log
   ) : senseTrigger(false), bitsBuffered(0), bitsPerSense(0),
+      maxBufferCapacity(UINT64_MAX), totalBitsLost(0), // Default to unlimited buffer
       prevSensePosn(eciPosn), prevSenseDateTime(*globalTime), eciPosn(eciPosn),
       globalTime(globalTime), id(id), log(log) {}
 
@@ -28,6 +30,8 @@ namespace cote {
    senseTrigger(sensor.getSenseTrigger()),
    bitsBuffered(sensor.getBitsBuffered()),
    bitsPerSense(sensor.getBitsPerSense()),
+   maxBufferCapacity(sensor.getMaxBufferCapacity()),
+   totalBitsLost(sensor.totalBitsLost),
    prevSensePosn(sensor.getPrevSensePosn()),
    prevSenseDateTime(sensor.getPrevSenseDateTime()),
    eciPosn(sensor.getECIPosn()), globalTime(sensor.getGlobalTime()),
@@ -35,7 +39,8 @@ namespace cote {
 
   Sensor::Sensor(Sensor&& sensor) :
    senseTrigger(sensor.senseTrigger), bitsBuffered(sensor.bitsBuffered),
-   bitsPerSense(sensor.bitsPerSense), prevSensePosn(sensor.prevSensePosn),
+   bitsPerSense(sensor.bitsPerSense), maxBufferCapacity(sensor.maxBufferCapacity),
+   totalBitsLost(sensor.totalBitsLost), prevSensePosn(sensor.prevSensePosn),
    prevSenseDateTime(sensor.prevSenseDateTime), eciPosn(sensor.eciPosn),
    globalTime(sensor.globalTime), id(sensor.id), log(sensor.log) {
     sensor.globalTime = NULL;
@@ -57,6 +62,8 @@ namespace cote {
     this->senseTrigger      = sensor.senseTrigger;
     this->bitsBuffered      = sensor.bitsBuffered;
     this->bitsPerSense      = sensor.bitsPerSense;
+    this->maxBufferCapacity = sensor.maxBufferCapacity;
+    this->totalBitsLost     = sensor.totalBitsLost;
     this->prevSensePosn     = sensor.prevSensePosn;
     this->prevSenseDateTime = sensor.prevSenseDateTime;
     this->eciPosn           = sensor.eciPosn;
@@ -82,6 +89,14 @@ namespace cote {
 
   uint64_t Sensor::getBitsPerSense() const {
     return this->bitsPerSense;
+  }
+
+  uint64_t Sensor::getMaxBufferCapacity() const {
+    return this->maxBufferCapacity;
+  }
+
+  uint64_t Sensor::getTotalBitsLost() const {
+    return this->totalBitsLost;
   }
 
   std::array<double,3> Sensor::getPrevSensePosn() const {
@@ -127,6 +142,10 @@ namespace cote {
     this->bitsPerSense = bits;
   }
 
+  void Sensor::setMaxBufferCapacity(const uint64_t& capacityBits) {
+    this->maxBufferCapacity = capacityBits;
+  }
+
   void Sensor::setECIPosn(const std::array<double,3>& eciPosn) {
     this->eciPosn = eciPosn;
   }
@@ -135,7 +154,24 @@ namespace cote {
     // **It is expected that this->globalTime has already been updated**
     // **It is expected that this->eciPosn has already been updated**
     if(this->senseTrigger) {
-      this->bitsBuffered     += this->bitsPerSense;
+      // Add new data, but cap at maximum buffer capacity
+      uint64_t newTotal = this->bitsBuffered + this->bitsPerSense;
+      if(newTotal > this->maxBufferCapacity) {
+        // Buffer overflow - data is lost!
+        this->bitsBuffered = this->maxBufferCapacity;
+        this->totalBitsLost += this->bitsPerSense; // Track cumulative loss
+        // Log cumulative overflow
+        if(this->log != NULL) {
+          this->log->meas(
+            cote::LogLevel::INFO,
+            DateTime(*(this->globalTime)).toString(),
+            std::string("buffer-overflow-sat-") + std::to_string(this->id),
+            std::to_string(static_cast<double>(this->totalBitsLost) / (8.0 * 1024.0 * 1024.0)) // Cumulative lost data in MB
+          );
+        }
+      } else {
+        this->bitsBuffered = newTotal;
+      }
       this->setPrevSensePosnDateTime(
        this->eciPosn, DateTime(*(this->globalTime))
       );

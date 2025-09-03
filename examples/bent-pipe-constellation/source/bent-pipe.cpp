@@ -182,6 +182,8 @@ int main(int argc, char** argv) {
   uint32_t pixelCount = static_cast<uint32_t>(std::stoi(line.substr(11,5)));
   double pixelSizeM = static_cast<double>(std::stod(line.substr(17,11)));
   double focalLengthM = static_cast<double>(std::stod(line.substr(29,10)));
+  uint64_t maxBufferMB = static_cast<uint64_t>(std::stoll(line.substr(line.find_last_of(',') + 1)));
+  uint64_t maxBufferBits = maxBufferMB * 1024 * 1024 * 8; // Convert MB to bits
   double threshCoeff = // frame width (km) = threshCoeff*altitude(km)
    (static_cast<double>(pixelCount)*pixelSizeM/focalLengthM);
   std::map<uint32_t,cote::Sensor*> satId2Sensor;
@@ -190,6 +192,7 @@ int main(int argc, char** argv) {
     std::array<double,3> posn = satellites.at(i).getECIPosn();
     satId2Sensor[id] = new cote::Sensor(posn,&dateTime,id,&log);
     satId2Sensor[id]->setBitsPerSense(bitsPerSense);
+    satId2Sensor[id]->setMaxBufferCapacity(maxBufferBits);
   }
   // Set up satellite TX
   std::ifstream satTxHandle(txSatFile.string());

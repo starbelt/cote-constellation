@@ -34,6 +34,8 @@ namespace cote {
     bool getSenseTrigger() const;
     uint64_t getBitsBuffered() const;
     uint64_t getBitsPerSense() const;
+    uint64_t getMaxBufferCapacity() const;
+    uint64_t getTotalBitsLost() const;
     std::array<double,3> getPrevSensePosn() const;
     DateTime getPrevSenseDateTime() const;
     std::array<double,3> getECIPosn() const;
@@ -43,6 +45,7 @@ namespace cote {
     void triggerSense(); // sets senseTrigger to true
     uint64_t drainBuffer(const uint64_t& bits); // returns value <= bits
     void setBitsPerSense(const uint64_t& bits);
+    void setMaxBufferCapacity(const uint64_t& capacityBits);
     void setECIPosn(const std::array<double,3>& eciPosn);
     void setPrevSensePosnDateTime(
      const std::array<double,3>& eciPosn, const DateTime& dateTime
@@ -61,6 +64,8 @@ namespace cote {
     bool senseTrigger;                  // If true, sense event at next update
     uint64_t bitsBuffered;              // bits of data buffered on device
     uint64_t bitsPerSense;              // bits per sense event
+    uint64_t maxBufferCapacity;         // maximum buffer capacity in bits
+    uint64_t totalBitsLost;             // cumulative bits lost to overflow
     std::array<double,3> prevSensePosn; // ECI position of most recent sense
     DateTime prevSenseDateTime;         // Date and time of most recent sense
     std::array<double,3> eciPosn;       // current ECI position
