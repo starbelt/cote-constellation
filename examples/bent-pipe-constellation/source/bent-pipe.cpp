@@ -96,8 +96,6 @@ int main(int argc, char** argv) {
       policyStr = std::string(argv[3]);
     }
     
-    // Append policy to log directory
-    logDirectory /= policyStr;
   }
   // Set up log
   std::vector<cote::LogLevel> levels = {cote::LogLevel::INFO};

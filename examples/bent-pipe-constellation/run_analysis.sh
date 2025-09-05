@@ -49,13 +49,6 @@ for policy in "${POLICIES[@]}"; do
     # Run simulation (ignore exit code, check for log files instead)
     ./build/bent_pipe ./configuration/ ./logs/$policy/ $policy || true
     
-    # Handle nested directory structure (simulation creates policy/policy/)
-    if [ -d "logs/$policy/$policy" ]; then
-        echo "  📁 Moving files from nested directory..."
-        mv logs/$policy/$policy/* logs/$policy/
-        rmdir logs/$policy/$policy
-    fi
-    
     end_time=$(date +%s)
     duration=$((end_time - start_time))
     file_count=$(ls -1 logs/$policy/*.csv 2>/dev/null | wc -l)
