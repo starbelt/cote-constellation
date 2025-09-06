@@ -88,17 +88,25 @@ def get_top_satellites():
         mbps_df["timestamp"] = pd.to_datetime(mbps_df["timestamp"])
         mbps_df["mbps"] = pd.to_numeric(mbps_df["mbps"], errors='coerce')
         
-        # Calculate totals per satellite
-        for _, row in tx_rx_df.iterrows():
-            sat = row["satellite"]
-            if pd.isna(sat):
+        # Calculate totals per satellite - FIX: Use index-based matching instead of timestamp matching
+        tx_rx_list = tx_rx_df.to_dict('records')
+        mbps_list = mbps_df.to_dict('records')
+        
+        policy_total = 0
+        matches = 0
+        
+        for i, tx_row in enumerate(tx_rx_list):
+            sat = tx_row["satellite"]
+            if pd.isna(sat) or sat == "None":
                 continue
                 
-            mbps_row = mbps_df[mbps_df["timestamp"] == row["timestamp"]]
-            if not mbps_row.empty:
-                mbps = mbps_row.iloc[0]["mbps"]
-                if pd.notna(mbps):
+            # Use index-based matching instead of timestamp matching
+            if i < len(mbps_list):
+                mbps = mbps_list[i]["mbps"]
+                if pd.notna(mbps) and mbps > 0:
                     data_mb = mbps * 100 / 8  # 100s timestep
+                    policy_total += data_mb
+                    matches += 1
                     if sat not in all_totals:
                         all_totals[sat] = {}
                     if policy not in all_totals[sat]:
@@ -231,13 +239,19 @@ def create_plot():
     for i, policy in enumerate(POLICIES):
         ax = axes[i // 2, i % 2]
         
+        # FIX: Calculate total from ALL satellites, not just top 15
         total_data = 0
+        for sat_id in all_totals:
+            sat_total = all_totals.get(sat_id, {}).get(policy, 0)
+            total_data += sat_total
+        
         legend_data = []
+        
+
         
         for j, sat_id in enumerate(top_satellites):
             sat_num = sat_id.split("-")[0] if "-" in sat_id else sat_id
             sat_total = all_totals.get(sat_id, {}).get(policy, 0)
-            total_data += sat_total
             
             buffer_df = load_buffer_data(policy, sat_id)
             if buffer_df is None:
@@ -262,7 +276,7 @@ def create_plot():
         
         ax.set_xlabel('Time (hours)')
         ax.set_ylabel('Buffer (MB)')
-        ax.set_title(f'{policy.upper()}\nTotal: {total_data:.0f} MB')
+        ax.set_title(f'{policy.upper()} Scheduling\nTotal Downloaded: {total_data:.0f} MB', fontweight='bold')
         ax.grid(True, alpha=0.3)
         ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
     
