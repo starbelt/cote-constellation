@@ -1,6 +1,26 @@
 #!/bin/bash
 # Complete Simulation and Analysis Pipeline
-# This script runs all scheduling policies, then generates both buffer and loss analyses
+# This script runs all schedulinecho ""
+echo "============================================================"
+echo "COMPLETE PIPELINE FINISHED"
+echo "============================================================"
+
+# Summary of results
+echo "📊 RESULTS SUMMARY:"
+echo "  🔧 Fresh simulations run for all 4 policies"
+echo "  📊 Buffer Analysis: constellation_analysis_*/buffer_comparison.png"
+echo "  📊 Data Loss Analysis: constellation_analysis_*/loss_comparison.png (if applicable)"
+echo "  📊 Distribution Analysis: constellation_analysis_*/satellite_distribution_bars.png"
+echo "  📦 Complete Logs: constellation_analysis_*/simulation_logs.zip"
+echo ""
+echo "🎯 Configuration used:"
+echo "  Buffer Cap: ${BUFFER_MB} MB"
+echo "  Image Size: ~29 MB"
+echo "  Satellites: 50"
+echo ""
+echo "💡 To modify buffer cap, edit configuration/sensor.dat (max-buffer-mb)"
+echo "💡 All charts show comprehensive multi-satellite constellation analysis"
+echo "💡 Check the latest constellation_analysis_* folder for all outputs"nerates both buffer and loss analyses
 
 set -e  # Exit on any error
 
@@ -67,36 +87,22 @@ echo "🎉 All simulations completed successfully!"
 echo ""
 
 # Step 2: Activate virtual environment for analysis
-echo "🔬 STEP 2: Running Analysis"
+echo "🔬 STEP 2: Running Comprehensive Analysis"
 echo "============================================================"
 echo "Activating virtual environment..."
 source "$VENV_PATH/bin/activate"
 
 echo ""
-echo "1. Running Buffer Analysis..."
+echo "Running Complete Analysis Suite (Buffer + Loss + Distribution)..."
 echo "------------------------------------------------------------"
 start_time=$(date +%s)
-python3 multi_satellite_buffer_plot.py
+python3 run_combined_analysis.py
 if [ $? -eq 0 ]; then
     end_time=$(date +%s)
     duration=$((end_time - start_time))
-    echo "✅ Buffer analysis completed successfully! (${duration}s)"
+    echo "✅ Complete analysis suite completed successfully! (${duration}s)"
 else
-    echo "❌ Buffer analysis failed!"
-    exit 1
-fi
-
-echo ""
-echo "2. Running Data Loss Analysis..."
-echo "------------------------------------------------------------"
-start_time=$(date +%s)
-python3 multi_satellite_loss_plot.py
-if [ $? -eq 0 ]; then
-    end_time=$(date +%s)
-    duration=$((end_time - start_time))
-    echo "✅ Data loss analysis completed successfully! (${duration}s)"
-else
-    echo "❌ Data loss analysis failed!"
+    echo "❌ Analysis suite failed!"
     exit 1
 fi
 

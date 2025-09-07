@@ -204,7 +204,7 @@ def get_orbital_passes():
     
     return []
 
-def create_plot():
+def create_plot(output_dir=None):
     """Create buffer comparison plot"""
     config = read_config()
     top_satellites, all_totals = get_top_satellites()
@@ -229,12 +229,10 @@ def create_plot():
     elif mb_per_sense:
         title_lines.append(f"Image Size: {mb_per_sense:.2f} MB")
     
-    title_lines.append(f"Top {TOP_N} Most Active Satellites by Data Volume")
+    title_lines.append(f"Buffer Levels Over Time (All Active Satellites Per Policy)")
     
     title = '\n'.join(title_lines)
     fig.suptitle(title, fontsize=16, fontweight='bold')
-    
-    colors = plt.cm.tab20(np.linspace(0, 1, len(top_satellites)))
     
     for i, policy in enumerate(POLICIES):
         ax = axes[i // 2, i % 2]
@@ -247,22 +245,34 @@ def create_plot():
         
         legend_data = []
         
-
+        # Get all satellites that this policy actually uses (not just global top 15)
+        policy_satellites = [sat_id for sat_id in all_totals if all_totals[sat_id].get(policy, 0) > 0]
+        # Sort by this policy's usage (highest first)
+        policy_satellites.sort(key=lambda sat: all_totals[sat].get(policy, 0), reverse=True)
         
-        for j, sat_id in enumerate(top_satellites):
+        # Use colors that cycle through the palette
+        policy_colors = plt.cm.tab20(np.linspace(0, 1, min(len(policy_satellites), 20)))
+        if len(policy_satellites) > 20:
+            # Extend colors for more satellites
+            extra_colors = plt.cm.Set3(np.linspace(0, 1, len(policy_satellites) - 20))
+            policy_colors = list(policy_colors) + list(extra_colors)
+        
+        for j, sat_id in enumerate(policy_satellites):
             sat_num = sat_id.split("-")[0] if "-" in sat_id else sat_id
             sat_total = all_totals.get(sat_id, {}).get(policy, 0)
             
             buffer_df = load_buffer_data(policy, sat_id)
             if buffer_df is None:
                 # No buffer data file found - use dashed line at zero
-                line = ax.axhline(0, color=colors[j], alpha=0.3, linestyle='--')
+                color = policy_colors[j % len(policy_colors)]
+                line = ax.axhline(0, color=color, alpha=0.3, linestyle='--')
                 legend_data.append((sat_total, line, f'Sat {sat_num} (0MB)'))
             else:
                 # Buffer data exists - always use solid line, adjust alpha based on data amount
                 alpha = 0.8 if sat_total > 0 else 0.4
+                color = policy_colors[j % len(policy_colors)]
                 line = ax.plot(buffer_df['hours'], buffer_df['buffer_mb'], 
-                       color=colors[j], linewidth=1.5, alpha=alpha, linestyle='solid')[0]
+                       color=color, linewidth=1.5, alpha=alpha, linestyle='solid')[0]
                 legend_data.append((sat_total, line, f'Sat {sat_num} ({sat_total:.0f}MB)'))
         
         # Add orbital passes
@@ -280,19 +290,25 @@ def create_plot():
         ax.grid(True, alpha=0.3)
         ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
     
-    # Save plot - use absolute paths for output directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = SCRIPT_DIR / f"buffer_analysis_{timestamp}"
-    output_dir.mkdir(exist_ok=True)
+    # Save plot - use provided output directory or create timestamped one
+    if output_dir is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = SCRIPT_DIR / f"buffer_analysis_{timestamp}"
+        output_dir.mkdir(exist_ok=True)
+        
+        # Create log archive only if we're creating our own directory
+        create_log_archive(output_dir)
+        print(f"Analysis complete! Generated plot with {len(passes)} orbital passes -> {output_dir}/buffer_comparison.png")
+    else:
+        # Just save the plot when called from combined analysis
+        pass
     
     plt.tight_layout()
     plt.savefig(output_dir / "buffer_comparison.png", dpi=300, bbox_inches='tight')
     plt.close()
     
-    # Create log archive
-    create_log_archive(output_dir)
-    
-    print(f"Analysis complete! Generated plot with {len(passes)} orbital passes -> {output_dir}/buffer_comparison.png")
+    if output_dir.parent == SCRIPT_DIR:  # Only print if we created our own directory
+        print(f"Analysis complete! Generated plot with {len(passes)} orbital passes -> {output_dir}/buffer_comparison.png")
 
 def create_log_archive(output_dir):
     """Create a zip archive of all simulation logs"""
@@ -320,7 +336,7 @@ def main():
         print("Please run simulations first using the scripts in the scripts/ directory.")
         return
     
-    create_plot()
+    create_plot()  # Use default behavior when run standalone
 
 if __name__ == "__main__":
     main()
