@@ -186,7 +186,7 @@ def analyze_satellite_data_per_pass():
     return results, passes
 
 def create_bar_chart(output_dir=None):
-    """Create comprehensive bar chart analysis"""
+    """Create clean bar chart showing total data downloaded per policy"""
     config = read_config()
     pass_results, passes = analyze_satellite_data_per_pass()
     
@@ -200,11 +200,75 @@ def create_bar_chart(output_dir=None):
         output_dir = SCRIPT_DIR / f"analysis_{timestamp}"
         output_dir.mkdir(exist_ok=True)
     
-    # Create single figure for policy comparison - make it bigger for better readability
-    fig, ax = plt.subplots(1, 1, figsize=(20, 12))
+    # Set consistent font family for the entire plot
+    plt.rcParams['font.family'] = 'DejaVu Sans'
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
+    
+    # Create figure - cleaner layout for simple bar chart
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    
+    # Calculate totals and statistics for each policy
+    policy_totals = {}
+    policy_satellites_served = {}
+    policy_passes_active = {}
+    
+    for policy in POLICIES:
+        if policy not in pass_results:
+            continue
+            
+        policy_data = pass_results[policy]
+        total_data = 0
+        all_satellites_used = set()
+        active_passes = 0
+        
+        for pass_idx in range(len(passes)):
+            if pass_idx in policy_data and policy_data[pass_idx]['total'] > 0:
+                total_data += policy_data[pass_idx]['total']
+                all_satellites_used.update(policy_data[pass_idx]['satellites'].keys())
+                active_passes += 1
+        
+        policy_totals[policy] = total_data
+        policy_satellites_served[policy] = len(all_satellites_used)
+        policy_passes_active[policy] = active_passes
+    
+    # Sort policies by total data downloaded (most first - winner first)
+    sorted_policies = sorted([p for p in POLICIES if p in policy_totals], 
+                           key=lambda p: policy_totals[p], reverse=True)
+    
+    # Create data for plotting
+    policy_labels = [policy.upper() for policy in sorted_policies]
+    data_values = [policy_totals[policy] for policy in sorted_policies]
+    satellite_counts = [policy_satellites_served[policy] for policy in sorted_policies]
+    
+    # Use a gradient of blues for the bars (darker for better performance)
+    bar_colors = ['#08306b', '#2171b5', '#4292c6', '#6baed6'][:len(sorted_policies)]
+    
+    # Create the bar chart
+    x_positions = np.arange(len(policy_labels))
+    bars = ax.bar(x_positions, data_values, color=bar_colors, alpha=0.8, width=0.6)
+    
+    # Add value labels on top of each bar
+    for i, (bar, policy, satellites) in enumerate(zip(bars, sorted_policies, satellite_counts)):
+        height = bar.get_height()
+        bar_bottom = bar.get_y()  # Get the bottom of the bar (might not be 0)
+        bar_height = height - bar_bottom  # Actual visual height of the bar
+        
+        # Main data label - position relative to bar height
+        ax.text(bar.get_x() + bar.get_width()/2, height + (max(data_values) - min(data_values)) * 0.02,
+               f'{height:.1f} MB',
+               ha='center', va='bottom', fontweight='bold', fontsize=14,
+               family='DejaVu Sans', color='#08306b')
+        
+        # Satellite count label in the middle of the visible bar
+        middle_y = bar_bottom + bar_height * 0.5
+        ax.text(bar.get_x() + bar.get_width()/2, middle_y,
+               f'{satellites} satellites',
+               ha='center', va='center', fontweight='bold', fontsize=12,
+               family='DejaVu Sans', color='white',
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='black', alpha=0.7))
     
     # Create enhanced title
-    title_lines = ["Satellite Constellation Data Distribution Analysis"]
+    title_lines = ["Satellite Constellation Scheduling Policy Performance"]
     
     # Add constellation parameters
     sat_count = config.get('satellite_count', 'Unknown')
@@ -216,164 +280,94 @@ def create_bar_chart(output_dir=None):
     elif mb_per_sense:
         title_lines.append(f"Image Size: {mb_per_sense:.2f} MB")
     
-    title_lines.append(f"Total Data Downloaded by Policy and Orbital Pass ({len(passes)} Passes)")
+    title_lines.append(f"Total Data Downloaded Across {len(passes)} Orbital Passes")
     
-    title = '\\n'.join(title_lines)
-    fig.suptitle(title, fontsize=16, fontweight='bold')
+    title = '\n'.join(title_lines)
+    fig.suptitle(title, fontsize=16, fontweight='bold', family='DejaVu Sans')
     
-    # Prepare data for stacked bar chart - policies on x-axis, stacked by pass
-    policy_labels = [policy.upper() for policy in POLICIES if policy in pass_results]
-    pass_colors = plt.cm.viridis(np.linspace(0, 1, len(passes)))
-    
-    # Collect data for each policy and pass
-    policy_pass_data = {}
-    policy_totals = {}
-    policy_satellites_served = {}
-    policy_satellites_per_pass = {}  # Track satellites per pass
-    policy_satellite_ids_per_pass = {}  # NEW: Track actual satellite IDs per pass
-    
-    for policy in POLICIES:
-        if policy not in pass_results:
-            continue
-            
-        policy_data = pass_results[policy]
-        pass_data_list = []
-        pass_satellite_counts = []  # Satellite count per pass
-        pass_satellite_ids = []  # NEW: Satellite IDs per pass
-        total_data = 0
-        all_satellites_used = set()
-        
-        for pass_idx in range(len(passes)):
-            if pass_idx in policy_data:
-                pass_total = policy_data[pass_idx]['total']
-                pass_satellites = list(policy_data[pass_idx]['satellites'].keys())  # Get satellite IDs
-                pass_data_list.append(pass_total)
-                pass_satellite_counts.append(len(pass_satellites))
-                pass_satellite_ids.append(pass_satellites)  # Store actual satellite IDs
-                total_data += pass_total
-                all_satellites_used.update(pass_satellites)
-            else:
-                pass_data_list.append(0)
-                pass_satellite_counts.append(0)
-                pass_satellite_ids.append([])  # Empty list for no satellites
-        
-        policy_pass_data[policy] = pass_data_list
-        policy_satellites_per_pass[policy] = pass_satellite_counts
-        policy_satellite_ids_per_pass[policy] = pass_satellite_ids  # NEW: store satellite IDs
-        policy_totals[policy] = total_data
-        policy_satellites_served[policy] = len(all_satellites_used)
-    
-    # Create stacked bar chart
-    x_positions = np.arange(len(policy_labels))
-    width = 0.6
-    
-    # Stack passes for each policy
-    bottom = np.zeros(len(policy_labels))
-    
-    for pass_idx in range(len(passes)):
-        pass_values = []
-        pass_satellite_counts = []  # New: collect satellite counts for this pass
-        pass_satellite_ids = []  # NEW: collect satellite IDs for this pass
-        
-        for policy in POLICIES:
-            if policy in policy_pass_data:
-                pass_values.append(policy_pass_data[policy][pass_idx])
-                pass_satellite_counts.append(policy_satellites_per_pass[policy][pass_idx])
-                pass_satellite_ids.append(policy_satellite_ids_per_pass[policy][pass_idx])
-            else:
-                pass_values.append(0)
-                pass_satellite_counts.append(0)
-                pass_satellite_ids.append([])
-        
-        bars = ax.bar(x_positions, pass_values, width, bottom=bottom, 
-                     label=f'Pass {pass_idx + 1}', color=pass_colors[pass_idx], alpha=0.8)
-        
-        # Add detailed labels on each stack segment with satellite count and IDs
-        for i, (bar, sat_count, sat_ids, value) in enumerate(zip(bars, pass_satellite_counts, pass_satellite_ids, pass_values)):
-            if value > 0:  # Only add label if there's data
-                # Calculate the center of this stack segment
-                segment_center = bottom[i] + value / 2
-                
-                # Create label text with data amount, satellite count, and satellite IDs
-                label_parts = [f'{value:.0f} MB']
-                if sat_count > 0:
-                    label_parts.append(f'{sat_count} sats')
-                    
-                    # Add satellite IDs - limit to first few that will fit
-                    if sat_ids:
-                        # Sort satellite IDs for consistent display
-                        sorted_sat_ids = sorted(sat_ids)
-                        
-                        # Determine how many satellite IDs to show based on available space
-                        # Estimate based on segment height and font size
-                        segment_height = value
-                        max_height = max(policy_totals.values()) if policy_totals else 1000
-                        relative_height = segment_height / max_height
-                        
-                        # Show more IDs for larger segments
-                        if relative_height > 0.15:  # Large segment
-                            max_ids_to_show = min(8, len(sorted_sat_ids))
-                        elif relative_height > 0.08:  # Medium segment
-                            max_ids_to_show = min(4, len(sorted_sat_ids))
-                        elif relative_height > 0.04:  # Small segment
-                            max_ids_to_show = min(2, len(sorted_sat_ids))
-                        else:  # Very small segment
-                            max_ids_to_show = 0
-                        
-                        if max_ids_to_show > 0:
-                            ids_to_show = sorted_sat_ids[:max_ids_to_show]
-                            ids_text = ', '.join(ids_to_show)
-                            if len(sorted_sat_ids) > max_ids_to_show:
-                                ids_text += f', +{len(sorted_sat_ids) - max_ids_to_show}'
-                            label_parts.append(f'({ids_text})')
-                
-                label_text = '\n'.join(label_parts)
-                
-                # Choose text color for visibility
-                text_color = 'white' if pass_idx < 3 else 'black'
-                
-                # Add label with enhanced information
-                ax.text(bar.get_x() + bar.get_width()/2, segment_center, 
-                       label_text, 
-                       ha='center', va='center', fontweight='bold', 
-                       fontsize=8, color=text_color,
-                       bbox=dict(boxstyle='round,pad=0.2', facecolor='black', alpha=0.6) if pass_idx >= 3 else None)
-        
-        bottom += np.array(pass_values)
-    
-    # Customize the chart with better styling
-    ax.set_xlabel('Scheduling Policy', fontweight='bold', fontsize=14)
-    ax.set_ylabel('Data Downloaded (MB)', fontweight='bold', fontsize=14)
+    # Customize the chart
+    ax.set_xlabel('Scheduling Policy (Ordered by Performance)', fontweight='bold', fontsize=14, family='DejaVu Sans')
+    ax.set_ylabel('Total Data Downloaded (MB)', fontweight='bold', fontsize=14, family='DejaVu Sans')
     ax.set_xticks(x_positions)
-    ax.set_xticklabels(policy_labels, fontsize=12, fontweight='bold')
+    ax.set_xticklabels(policy_labels, fontsize=12, fontweight='bold', family='DejaVu Sans')
+    
+    # Add horizontal grid for easier reading
     ax.grid(True, alpha=0.3, axis='y', linestyle='--')
-    ax.legend(title='Orbital Passes', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=11)
+    ax.set_axisbelow(True)
     
-    # Make tick labels larger
+    # Style the axes
     ax.tick_params(axis='y', labelsize=11)
+    for label in ax.get_yticklabels():
+        label.set_family('DejaVu Sans')
     
-    # Add clear summary labels at the top of each bar
-    for i, policy in enumerate(POLICIES):
-        if policy in policy_totals:
-            total = policy_totals[policy]
-            sats = policy_satellites_served[policy]
+    # Smart y-axis scaling to show differences better
+    if data_values:
+        max_value = max(data_values)
+        min_value = min(data_values)
+        value_range = max_value - min_value
+        
+        # If values are very close (difference < 5% of max), zoom in
+        if value_range / max_value < 0.05:
+            # Start y-axis at 90% of minimum value to show differences
+            y_min = min_value * 0.9
+            y_max = max_value * 1.05
+        else:
+            # Use normal scaling when differences are significant
+            y_min = 0
+            y_max = max_value * 1.15
+        
+        ax.set_ylim(y_min, y_max)
+        
+        # Adjust bar chart to start from y_min when zoomed
+        if y_min > 0:
+            # Re-create bars with bottom starting at y_min
+            ax.clear()
             
-            # Add bold summary text above each bar
-            ax.text(i, total + max(policy_totals.values()) * 0.02, 
-                   f'{total:.0f} MB Total Down\n{sats} Sats Downlinked', 
-                   ha='center', va='bottom', fontweight='bold', fontsize=14,
-                   bbox=dict(boxstyle='round,pad=0.5', facecolor='lightblue', alpha=0.8, edgecolor='navy'))
+            # Re-apply styling after clearing
+            bars = ax.bar(x_positions, [v - y_min for v in data_values], 
+                         bottom=y_min, color=bar_colors, alpha=0.8, width=0.6)
+            
+            # Re-add labels and styling
+            ax.set_xlabel('Scheduling Policy (Ordered by Performance)', fontweight='bold', fontsize=14, family='DejaVu Sans')
+            ax.set_ylabel('Total Data Downloaded (MB)', fontweight='bold', fontsize=14, family='DejaVu Sans')
+            ax.set_xticks(x_positions)
+            ax.set_xticklabels(policy_labels, fontsize=12, fontweight='bold', family='DejaVu Sans')
+            ax.grid(True, alpha=0.3, axis='y', linestyle='--')
+            ax.set_axisbelow(True)
+            ax.tick_params(axis='y', labelsize=11)
+            for label in ax.get_yticklabels():
+                label.set_family('DejaVu Sans')
+            ax.set_ylim(y_min, y_max)
+    else:
+        ax.set_ylim(0, 1000)
     
-    # Set y-axis limit to accommodate text - give more space for the summary labels
-    max_total = max(policy_totals.values()) if policy_totals else 1000
-    ax.set_ylim(0, max_total * 1.25)
+    # Add value labels on top of each bar (after potential re-creation)
+    for i, (bar, policy, satellites, value) in enumerate(zip(bars, sorted_policies, satellite_counts, data_values)):
+        # Main data label
+        ax.text(bar.get_x() + bar.get_width()/2, value + (max(data_values) - min(data_values)) * 0.02,
+               f'{value:.1f} MB',
+               ha='center', va='bottom', fontweight='bold', fontsize=14,
+               family='DejaVu Sans', color='#08306b')
+        
+        # Satellite count label in the middle of the bar
+        bar_middle = (bar.get_height() / 2) + bar.get_y()
+        ax.text(bar.get_x() + bar.get_width()/2, bar_middle,
+               f'{satellites} satellites',
+               ha='center', va='center', fontweight='bold', fontsize=12,
+               family='DejaVu Sans', color='white',
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='black', alpha=0.7))
     
     plt.tight_layout()
     plt.savefig(output_dir / "satellite_distribution_bars.png", dpi=300, bbox_inches='tight')
     plt.close()
     
+    # Reset matplotlib settings to default
+    plt.rcParams.update(plt.rcParamsDefault)
+    
     if output_dir and output_dir.parent == SCRIPT_DIR:  # Only print if we created our own directory
         print(f"Generated satellite distribution bar chart -> {output_dir}/satellite_distribution_bars.png")
+        print(f"Performance ranking: {' > '.join([p.upper() for p in sorted_policies])}")
+        print(f"For detailed pass-by-pass analysis, use the buffer plot or loss plot scripts.")
 
 def main():
     """Main function"""
