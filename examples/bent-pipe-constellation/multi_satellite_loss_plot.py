@@ -241,7 +241,10 @@ def create_plot():
     if not top_satellites:
         print("No data loss found! This means buffer caps are working well or are set too high.")
         print("Consider reducing max-buffer-mb in sensor.dat to see overflow behavior.")
-        return
+        print("Creating charts anyway - they will show zero losses.")
+        # Use a dummy satellite list for the chart structure
+        top_satellites = ['00001', '00002', '00003']  # Show a few satellites with zero loss
+        all_totals = {}
     
     print(f"Creating plots for {len(top_satellites)} satellites...")
     fig, axes = plt.subplots(2, 2, figsize=(20, 16))

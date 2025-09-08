@@ -51,7 +51,8 @@ def main():
     scripts_to_run = [
         ("Buffer Analysis", "multi_satellite_buffer_plot.py", "buffer_comparison.png"),
         ("Data Loss Analysis", "multi_satellite_loss_plot.py", "loss_comparison.png"),
-        ("Distribution Analysis", "multi_satellite_distribution_bars.py", "satellite_distribution_bars.png")
+        ("Distribution Analysis", "multi_satellite_distribution_bars.py", "satellite_distribution_bars.png"),
+        ("Loss Summary", "multi_satellite_loss_bars.py", "satellite_loss_bars.png")
     ]
     
     success_count = 0
