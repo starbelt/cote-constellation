@@ -44,7 +44,7 @@ cd "$SCRIPT_DIR"
 BUFFER_MB=$(grep -v "^bits-per-sense" configuration/sensor.dat | cut -d',' -f5)
 echo "📋 Current Configuration:"
 echo "  Buffer Cap: ${BUFFER_MB} MB"
-echo "  Policies: greedy, fifo, roundrobin, random"
+echo "  Policies: sticky, fifo, roundrobin, random"
 echo ""
 
 # Step 1: Run all simulations
@@ -55,7 +55,7 @@ echo "============================================================"
 echo "🔨 Building simulation (clean rebuild)..."
 cd build && make clean && make && cd ..
 
-POLICIES=("greedy" "fifo" "roundrobin" "random")
+POLICIES=("sticky" "fifo" "roundrobin" "random")
 for policy in "${POLICIES[@]}"; do
     echo ""
     echo "🎯 Running $(echo $policy | tr '[:lower:]' '[:upper:]') policy..."

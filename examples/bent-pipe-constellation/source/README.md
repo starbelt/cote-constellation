@@ -4,7 +4,7 @@ This directory contains various scheduling policies for satellite-to-ground down
 
 ## Policy Overview
 
-### GreedyPolicy (original)
+### StickyPolicy (original)
 A simple greedy policy that maintains the current satellite connection as long as possible. Once connected to a satellite, it will not switch unless the satellite goes out of view. When no satellite is connected, it selects the visible satellite with the highest buffered data volume. This represents the original "bent-pipe" behavior where ground stations stick to their chosen satellite.
 
 ### FIFOPolicy (True First-In-First-Out)
@@ -31,13 +31,6 @@ The fundamental difference between these policies lies in their switching behavi
 - **FIFO**: Satellites are served to completion (or until out of view). More efficient for individual satellites but potentially less fair.
 - **Round Robin**: Fixed time slices ensure all satellites get regular access. More fair but potentially less efficient due to switching overhead.
 
-## Performance Comparison
-
-Based on test scenarios:
-- **Greedy**: ~12.7 GB total download, minimal satellite switching (sticks to best satellite)
-- **FIFO**: ~12.7 GB total download, switches only when satellites complete or lose visibility
-- **Round Robin**: ~12.8 GB total download, regular switching every 30 time steps
-
 ## Common Features
 
 ## Usage
@@ -47,4 +40,4 @@ Policies are selected via command line argument when running the simulation:
 ./bent-pipe /path/to/config/ /path/to/logs/ [policy_name]
 ```
 
-Supported policy names: `greedy`, `fifo`, `sjf`, `srtf`, `roundrobin`, `random`
+Supported policy names: `sticky`, `fifo`, `sjf`, `srtf`, `roundrobin`, `random`

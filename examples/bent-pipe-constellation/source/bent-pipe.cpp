@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
   std::vector<std::filesystem::path> groundStationFiles; // ground station files
   std::vector<std::filesystem::path> rxGndFiles;         // gnd station RX files
   std::filesystem::path logDirectory;      // logs destination
-  std::string policyStr = "greedy";        // default to original bent-pipe behavior
+  std::string policyStr = "sticky";        // default to sticky (original bent-pipe behavior)
   // Parse command line argument(s)
   if(argc < 3 || argc > 4) {
     std::cout << "Usage: " << argv[0]

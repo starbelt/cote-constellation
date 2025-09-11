@@ -15,7 +15,7 @@ import zipfile
 # Configuration - use absolute paths
 SCRIPT_DIR = Path(__file__).parent.absolute()
 LOGS_DIR = SCRIPT_DIR / "logs"
-POLICIES = ["greedy", "fifo", "roundrobin", "random"]
+POLICIES = ["sticky", "fifo", "roundrobin", "random"]
 TOP_N = 15
 
 def read_config():

@@ -9,7 +9,7 @@
 #include "RoundRobinPolicy.hpp"
 #include "ShortestJobFirstPolicy.hpp"
 #include "ShortestRemainingTimePolicy.hpp"
-#include "GreedyPolicy.hpp"
+#include "StickyPolicy.hpp"
 
 class PolicyFactory {
 public:
@@ -24,11 +24,11 @@ public:
             return std::make_unique<ShortestJobFirstPolicy>();
         } else if(policyName == "srtf" || policyName == "shortestremainingtime") {
             return std::make_unique<ShortestRemainingTimePolicy>();
-        } else if(policyName == "greedy" || policyName == "sticky") {
-            return std::make_unique<GreedyPolicy>();
+        } else if(policyName == "sticky" || policyName == "greedy") {
+            return std::make_unique<StickyPolicy>();
         }
-        // Default to greedy (original bent-pipe behavior)
-        return std::make_unique<GreedyPolicy>();
+        // Default to sticky (original bent-pipe behavior)
+        return std::make_unique<StickyPolicy>();
     }
 };
 

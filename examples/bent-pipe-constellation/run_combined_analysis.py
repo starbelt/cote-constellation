@@ -17,7 +17,7 @@ def create_log_archive(output_dir):
     """Create a zip archive of all simulation logs"""
     script_dir = Path(__file__).parent.absolute()
     logs_dir = script_dir / "logs"
-    policies = ["greedy", "fifo", "roundrobin", "random"]
+    policies = ["sticky", "fifo", "roundrobin", "random"]
     
     archive_path = output_dir / "simulation_logs.zip"
     

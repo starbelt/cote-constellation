@@ -7,7 +7,7 @@
 #include <Sensor.hpp>
 #include <DateTime.hpp>
 
-class GreedyPolicy : public SchedulingPolicy {
+class StickyPolicy : public SchedulingPolicy {
 public:
     virtual std::string getPolicyName() override {
         return "Sticky";
