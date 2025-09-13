@@ -128,35 +128,54 @@ def get_global_time_reference():
     policy_dirs = get_policy_dirs()
     min_timestamp = None
     
-    # Try to get from overflow files first (just check first file from first policy)
+    # Check ALL possible timestamp sources to find the absolute earliest time
     for policy_dir in policy_dirs.values():
-        overflow_files = list(policy_dir.glob("meas-buffer-overflow-sat-*.csv"))
-        if overflow_files:
+        # Check tx-rx files first (these typically start earliest)
+        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
+        if tx_rx_file.exists():
             try:
-                df = pd.read_csv(overflow_files[0])
+                df = pd.read_csv(tx_rx_file)
+                if len(df) > 0:
+                    df = df.iloc[:, :2]
+                    df.columns = ["timestamp", "satellite"]
+                    df["timestamp"] = pd.to_datetime(df["timestamp"])
+                    file_min = df["timestamp"].min()
+                    if min_timestamp is None or file_min < min_timestamp:
+                        min_timestamp = file_min
+            except:
+                continue
+        
+        # Also check buffer files for completeness
+        buffer_files = list(policy_dir.glob("meas-MB-buffered-sat-*.csv"))
+        for buffer_file in buffer_files[:5]:  # Check first 5 buffer files
+            try:
+                df = pd.read_csv(buffer_file)
+                if len(df) > 0:
+                    df = df.iloc[:, :2]
+                    df.columns = ["timestamp", "buffer_mb"]
+                    df["timestamp"] = pd.to_datetime(df["timestamp"])
+                    file_min = df["timestamp"].min()
+                    if min_timestamp is None or file_min < min_timestamp:
+                        min_timestamp = file_min
+                    break  # Just check one buffer file per policy
+            except:
+                continue
+        
+        # Check overflow files last (these typically start later)
+        overflow_files = list(policy_dir.glob("meas-buffer-overflow-sat-*.csv"))
+        for overflow_file in overflow_files[:5]:  # Check first 5 overflow files
+            try:
+                df = pd.read_csv(overflow_file)
                 if len(df) > 0:
                     df = df.iloc[:, :2]
                     df.columns = ["timestamp", "loss_mb"]
                     df["timestamp"] = pd.to_datetime(df["timestamp"])
-                    min_timestamp = df["timestamp"].min()
-                    break
+                    file_min = df["timestamp"].min()
+                    if min_timestamp is None or file_min < min_timestamp:
+                        min_timestamp = file_min
+                    break  # Just check one overflow file per policy
             except:
                 continue
-    
-    # Fallback to downlink files if no overflow data
-    if min_timestamp is None:
-        for policy_dir in policy_dirs.values():
-            tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-            if not tx_rx_file.exists():
-                continue
-                
-            df = pd.read_csv(tx_rx_file)
-            df = df.iloc[:, :2]
-            df.columns = ["timestamp", "satellite"]
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
-            
-            min_timestamp = df["timestamp"].min()
-            break
     
     _global_time_cache = min_timestamp
     return min_timestamp

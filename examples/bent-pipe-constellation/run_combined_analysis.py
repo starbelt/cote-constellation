@@ -49,16 +49,18 @@ def main():
     print(f"\n📁 Creating unified analysis folder: {output_dir.name}")
     
     scripts_to_run = [
-        ("Buffer Analysis", "multi_satellite_buffer_plot.py", "buffer_comparison.png"),
-        ("Data Loss Analysis", "multi_satellite_loss_plot.py", "loss_comparison.png"),
-        ("Distribution Analysis", "multi_satellite_distribution_bars.py", "satellite_distribution_bars.png"),
-        ("Loss Summary", "multi_satellite_loss_bars.py", "satellite_loss_bars.png")
+        ("Buffer Analysis", "multi_satellite_buffer_plot.py", ["buffer_comparison.png"]),
+        ("Data Loss Analysis", "multi_satellite_loss_plot.py", ["loss_comparison.png"]),
+        ("Distribution Analysis", "multi_satellite_distribution_bars.py", ["satellite_distribution_bars.png"]),
+        ("Loss Summary", "multi_satellite_loss_bars.py", ["satellite_loss_bars.png"]),
+        ("Idle Time Analysis", "multi_satellite_idle_plot.py", ["idle_time_comparison.png", "idle_time_bars.png"]),
+        ("Idle Time Summary", "multi_satellite_idle_bars.py", ["satellite_idle_bars.png"])
     ]
     
     success_count = 0
     
     # Run all analysis scripts
-    for i, (name, script_name, output_file) in enumerate(scripts_to_run, 1):
+    for i, (name, script_name, output_files) in enumerate(scripts_to_run, 1):
         print(f"\n{i}. Running {name}...")
         script_path = script_dir / script_name
         
@@ -77,11 +79,12 @@ def main():
                     if recent_folders:
                         most_recent = max(recent_folders, key=lambda x: x.stat().st_mtime)
                         
-                        # Move the PNG file to our unified folder
-                        source_png = most_recent / output_file
-                        if source_png.exists():
-                            shutil.move(str(source_png), str(output_dir / output_file))
-                            print(f"   📊 Moved {output_file} to unified analysis folder")
+                        # Move the PNG files to our unified folder
+                        for output_file in output_files:
+                            source_png = most_recent / output_file
+                            if source_png.exists():
+                                shutil.move(str(source_png), str(output_dir / output_file))
+                                print(f"   📊 Moved {output_file} to unified analysis folder")
                         
                         # Clean up the individual analysis folder if it's empty
                         try:
