@@ -385,8 +385,8 @@ int main(int argc, char** argv) {
          threshCoeff*cote::util::calcAltitudeKm(satellites.at(i).getECIPosn());
       }
     }
-    // Log info every 100 sim steps
-    if(stepCount%100==0) {
+    // Log info every 1 sim steps
+    if(stepCount%1==0) {
       if(downlinks.size()==0) {
         log.meas(
          cote::LogLevel::INFO,

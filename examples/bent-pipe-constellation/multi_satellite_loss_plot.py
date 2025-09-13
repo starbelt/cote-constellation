@@ -247,7 +247,7 @@ def create_plot():
         all_totals = {}
     
     print(f"Creating plots for {len(top_satellites)} satellites...")
-    fig, axes = plt.subplots(2, 2, figsize=(20, 16))
+    fig, axes = plt.subplots(2, 2, figsize=(28, 24))  # Increased size for 50-satellite legend
     
     # Create enhanced title
     title_lines = ["Satellite Constellation Data Loss Analysis"]
@@ -270,8 +270,6 @@ def create_plot():
     title = '\n'.join(title_lines)
     fig.suptitle(title, fontsize=16, fontweight='bold')
     
-    colors = plt.cm.tab20(np.linspace(0, 1, len(top_satellites)))
-    
     for i, policy in enumerate(POLICIES):
         print(f"  Processing {policy} policy ({i+1}/{len(POLICIES)})...")
         ax = axes[i // 2, i % 2]
@@ -279,29 +277,49 @@ def create_plot():
         total_loss = 0
         legend_data = []
         
-        for j, sat_id in enumerate(top_satellites):
+        # Generate all 50 satellite IDs in the format that matches the data ('60518000', etc.)
+        all_50_satellites = [f"60518{i:03d}" for i in range(50)]
+        
+        # Use colors that cycle through the palette for all 50 satellites
+        colors = plt.cm.tab20(np.linspace(0, 1, 20))
+        extra_colors = plt.cm.Set3(np.linspace(0, 1, 20))
+        extended_colors = plt.cm.Dark2(np.linspace(0, 1, 10))
+        all_colors = list(colors) + list(extra_colors) + list(extended_colors)
+        
+        for j, sat_id in enumerate(all_50_satellites):
+            sat_num = sat_id  # sat_id is already just the number (60518000, 60518001, etc.)
             sat_total = all_totals.get(sat_id, {}).get(policy, 0)
             total_loss += sat_total
+            color = all_colors[j % len(all_colors)]
             
             loss_df = load_loss_data(policy, sat_id)
-            if loss_df is None or len(loss_df) == 0:
-                # No loss data - use dashed line at zero
-                line = ax.axhline(0, color=colors[j], alpha=0.3, linestyle='--')
-                legend_data.append((sat_total, line, f'Sat {sat_id} (0MB)'))
+            if loss_df is None or len(loss_df) == 0 or sat_total == 0:
+                # No loss data or no actual loss - use greyed line at zero
+                line = ax.axhline(0, color='lightgray', alpha=0.3, linestyle='--', linewidth=0.5)
+                legend_data.append((sat_total, line, f'{sat_id} (0MB)', True))  # True = greyed
             else:
-                # Loss data exists - use solid line
+                # Loss data exists - use normal colored line
                 line = ax.plot(loss_df['hours'], loss_df['loss_mb'], 
-                       color=colors[j], linewidth=2, alpha=0.8, linestyle='solid')[0]
-                legend_data.append((sat_total, line, f'Sat {sat_id} ({sat_total:.0f}MB)'))
+                       color=color, linewidth=2, alpha=0.8, linestyle='solid')[0]
+                legend_data.append((sat_total, line, f'{sat_id} ({sat_total:.0f}MB)', False))  # False = normal
         
         # Add orbital passes
         for start, end in passes:
             ax.axvspan(start, end, alpha=0.1, color='green')
         
-        # Sort legend by loss amount (highest first)
-        legend_data.sort(key=lambda x: x[0], reverse=True)
-        handles = [item[1] for item in legend_data]
-        labels = [item[2] for item in legend_data]
+        # Sort legend: active satellites first (by loss amount, highest first), then greyed satellites by number
+        active_legends = [(data, line, label) for data, line, label, is_grey in legend_data if not is_grey]
+        greyed_legends = [(data, line, label) for data, line, label, is_grey in legend_data if is_grey]
+        
+        # Sort active by loss amount (descending), greyed by satellite number (ascending)
+        active_legends.sort(key=lambda x: x[0], reverse=True)
+        greyed_legends.sort(key=lambda x: x[2])  # Sort by label (contains sat number)
+        
+        # Combine: active satellites first, then greyed satellites
+        sorted_legends = active_legends + greyed_legends
+        
+        handles = [item[1] for item in sorted_legends]
+        labels = [item[2] for item in sorted_legends]
         
         ax.set_xlabel('Time (hours)')
         ax.set_ylabel('Cumulative Data Loss (MB)')

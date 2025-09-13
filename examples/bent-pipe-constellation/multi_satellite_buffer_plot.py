@@ -62,56 +62,78 @@ def get_policy_dirs():
     return dirs
 
 def get_top_satellites():
-    """Get top satellites by usage across all policies"""
+    """Get satellites with most downlink activity based on ACTUAL buffer changes, not just tx-rx logs"""
     policy_dirs = get_policy_dirs()
     all_totals = {}
     
     for policy, policy_dir in policy_dirs.items():
+        print(f"  Processing {policy} policy...")
+        
+        # Method 1: Use tx-rx logs for basic tracking
         tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-        mbps_file = policy_dir / "meas-downlink-Mbps.csv"
+        mbps_file = policy_dir / "meas-downlink-mbps.csv"
         
-        if not (tx_rx_file.exists() and mbps_file.exists()):
-            continue
+        if tx_rx_file.exists() and mbps_file.exists():
+            tx_rx_df = pd.read_csv(tx_rx_file)
+            mbps_df = pd.read_csv(mbps_file)
             
-        tx_rx_df = pd.read_csv(tx_rx_file)
-        mbps_df = pd.read_csv(mbps_file)
+            tx_rx_df = tx_rx_df.iloc[:, :2]
+            mbps_df = mbps_df.iloc[:, :2]
+            
+            tx_rx_df.columns = ["timestamp", "satellite"]
+            mbps_df.columns = ["timestamp", "mbps"]
+            
+            tx_rx_df["timestamp"] = pd.to_datetime(tx_rx_df["timestamp"])
+            mbps_df["timestamp"] = pd.to_datetime(mbps_df["timestamp"])
+            mbps_df["mbps"] = pd.to_numeric(mbps_df["mbps"], errors='coerce')
+            
+            # Calculate totals from tx-rx logs
+            tx_rx_list = tx_rx_df.to_dict('records')
+            mbps_list = mbps_df.to_dict('records')
+            
+            for i, tx_row in enumerate(tx_rx_list):
+                sat = tx_row["satellite"]
+                if pd.isna(sat) or sat == "None":
+                    continue
+                    
+                if i < len(mbps_list):
+                    mbps = mbps_list[i]["mbps"]
+                    if pd.notna(mbps) and mbps > 0:
+                        data_mb = mbps * 100 / 8  # 100s timestep
+                        if sat not in all_totals:
+                            all_totals[sat] = {}
+                        if policy not in all_totals[sat]:
+                            all_totals[sat][policy] = 0
+                        all_totals[sat][policy] += data_mb
         
-        # Handle CSV structure - keep only the first 2 columns
-        tx_rx_df = tx_rx_df.iloc[:, :2]
-        mbps_df = mbps_df.iloc[:, :2]
-        
-        # Standardize columns
-        tx_rx_df.columns = ["timestamp", "satellite"]
-        mbps_df.columns = ["timestamp", "mbps"]
-        
-        tx_rx_df["timestamp"] = pd.to_datetime(tx_rx_df["timestamp"])
-        mbps_df["timestamp"] = pd.to_datetime(mbps_df["timestamp"])
-        mbps_df["mbps"] = pd.to_numeric(mbps_df["mbps"], errors='coerce')
-        
-        # Calculate totals per satellite - FIX: Use index-based matching instead of timestamp matching
-        tx_rx_list = tx_rx_df.to_dict('records')
-        mbps_list = mbps_df.to_dict('records')
-        
-        policy_total = 0
-        matches = 0
-        
-        for i, tx_row in enumerate(tx_rx_list):
-            sat = tx_row["satellite"]
-            if pd.isna(sat) or sat == "None":
-                continue
-                
-            # Use index-based matching instead of timestamp matching
-            if i < len(mbps_list):
-                mbps = mbps_list[i]["mbps"]
-                if pd.notna(mbps) and mbps > 0:
-                    data_mb = mbps * 100 / 8  # 100s timestep
-                    policy_total += data_mb
-                    matches += 1
-                    if sat not in all_totals:
-                        all_totals[sat] = {}
-                    if policy not in all_totals[sat]:
-                        all_totals[sat][policy] = 0
-                    all_totals[sat][policy] += data_mb
+        # Method 2: ALSO check buffer files for satellites missed by tx-rx logs
+        # Check all 50 satellite buffer files for actual downlink activity
+        for sat_num in range(50):
+            sat_id = f"60518{sat_num:03d}-0"
+            buffer_file = policy_dir / f"meas-MB-buffered-sat-{sat_id.replace('-0', '')}.csv"
+            
+            if buffer_file.exists():
+                try:
+                    buffer_df = pd.read_csv(buffer_file)
+                    if len(buffer_df) > 1:
+                        buffer_col = f"MB-buffered-sat-{sat_id.replace('-0', '')}"
+                        if buffer_col in buffer_df.columns:
+                            # Calculate total data downloaded by summing buffer drops > 5MB
+                            buffer_df['prev_value'] = buffer_df[buffer_col].shift(1)
+                            buffer_df['drop'] = buffer_df['prev_value'] - buffer_df[buffer_col]
+                            
+                            # Sum all significant drops (downloads)
+                            total_downloaded = buffer_df[buffer_df['drop'] > 5.0]['drop'].sum()
+                            
+                            if total_downloaded > 0:
+                                if sat_id not in all_totals:
+                                    all_totals[sat_id] = {}
+                                if policy not in all_totals[sat_id]:
+                                    all_totals[sat_id][policy] = 0
+                                # Use the higher value between tx-rx logs and buffer analysis
+                                all_totals[sat_id][policy] = max(all_totals[sat_id][policy], total_downloaded)
+                except Exception as e:
+                    pass  # Skip files that can't be read
     
     # Get top satellites by max usage
     sat_max = {sat: max(policies.values()) for sat, policies in all_totals.items()}
@@ -214,7 +236,7 @@ def create_plot(output_dir=None):
         print("No satellite data found!")
         return
     
-    fig, axes = plt.subplots(2, 2, figsize=(20, 16))
+    fig, axes = plt.subplots(2, 2, figsize=(28, 24))  # Increased size for 50-satellite legend
     
     # Create enhanced title
     title_lines = ["Satellite Constellation Buffer Analysis"]
@@ -245,44 +267,48 @@ def create_plot(output_dir=None):
         
         legend_data = []
         
-        # Get all satellites that this policy actually uses (not just global top 15)
-        policy_satellites = [sat_id for sat_id in all_totals if all_totals[sat_id].get(policy, 0) > 0]
-        # Sort by this policy's usage (highest first)
-        policy_satellites.sort(key=lambda sat: all_totals[sat].get(policy, 0), reverse=True)
+        # Generate all 50 satellite IDs in the format that matches the data ('60518000-0', etc.)
+        all_50_satellites = [f"60518{i:03d}-0" for i in range(50)]
         
-        # Use colors that cycle through the palette
-        policy_colors = plt.cm.tab20(np.linspace(0, 1, min(len(policy_satellites), 20)))
-        if len(policy_satellites) > 20:
-            # Extend colors for more satellites
-            extra_colors = plt.cm.Set3(np.linspace(0, 1, len(policy_satellites) - 20))
-            policy_colors = list(policy_colors) + list(extra_colors)
+        # Use colors that cycle through the palette for all 50 satellites
+        policy_colors = plt.cm.tab20(np.linspace(0, 1, 20))
+        extra_colors = plt.cm.Set3(np.linspace(0, 1, 20))
+        extended_colors = plt.cm.Dark2(np.linspace(0, 1, 10))
+        all_colors = list(policy_colors) + list(extra_colors) + list(extended_colors)
         
-        for j, sat_id in enumerate(policy_satellites):
-            sat_num = sat_id.split("-")[0] if "-" in sat_id else sat_id
+        for j, sat_id in enumerate(all_50_satellites):
+            sat_num = sat_id.split("-")[0]  # Extract the number part (60518000, 60518001, etc.)
             sat_total = all_totals.get(sat_id, {}).get(policy, 0)
+            color = all_colors[j % len(all_colors)]
             
             buffer_df = load_buffer_data(policy, sat_id)
-            if buffer_df is None:
-                # No buffer data file found - use dashed line at zero
-                color = policy_colors[j % len(policy_colors)]
-                line = ax.axhline(0, color=color, alpha=0.3, linestyle='--')
-                legend_data.append((sat_total, line, f'Sat {sat_num} (0MB)'))
+            if buffer_df is None or sat_total == 0:
+                # No buffer data file found or no downlink data - use greyed line at zero
+                line = ax.axhline(0, color='lightgray', alpha=0.3, linestyle='--', linewidth=0.5)
+                legend_data.append((sat_total, line, f'{sat_id} (0MB)', True))  # True = greyed
             else:
-                # Buffer data exists - always use solid line, adjust alpha based on data amount
-                alpha = 0.8 if sat_total > 0 else 0.4
-                color = policy_colors[j % len(policy_colors)]
+                # Buffer data exists and has downlink data - use normal colored line
                 line = ax.plot(buffer_df['hours'], buffer_df['buffer_mb'], 
-                       color=color, linewidth=1.5, alpha=alpha, linestyle='solid')[0]
-                legend_data.append((sat_total, line, f'Sat {sat_num} ({sat_total:.0f}MB)'))
+                       color=color, linewidth=1.5, alpha=0.8, linestyle='solid')[0]
+                legend_data.append((sat_total, line, f'{sat_id} ({sat_total:.0f}MB)', False))  # False = normal
         
         # Add orbital passes
         for start, end in passes:
             ax.axvspan(start, end, alpha=0.1, color='green')
         
-        # Sort legend by data amount (highest first)
-        legend_data.sort(key=lambda x: x[0], reverse=True)
-        handles = [item[1] for item in legend_data]
-        labels = [item[2] for item in legend_data]
+        # Sort legend: active satellites first (by data amount, highest first), then greyed satellites by number
+        active_legends = [(data, line, label) for data, line, label, is_grey in legend_data if not is_grey]
+        greyed_legends = [(data, line, label) for data, line, label, is_grey in legend_data if is_grey]
+        
+        # Sort active by data amount (descending), greyed by satellite number (ascending)
+        active_legends.sort(key=lambda x: x[0], reverse=True)
+        greyed_legends.sort(key=lambda x: x[2])  # Sort by label (contains sat number)
+        
+        # Combine: active satellites first, then greyed satellites
+        sorted_legends = active_legends + greyed_legends
+        
+        handles = [item[1] for item in sorted_legends]
+        labels = [item[2] for item in sorted_legends]
         
         ax.set_xlabel('Time (hours)')
         ax.set_ylabel('Buffer (MB)')
