@@ -53,8 +53,7 @@ def main():
         ("Data Loss Analysis", "multi_satellite_loss_plot.py", ["loss_comparison.png"]),
         ("Distribution Analysis", "multi_satellite_distribution_bars.py", ["satellite_distribution_bars.png"]),
         ("Loss Summary", "multi_satellite_loss_bars.py", ["satellite_loss_bars.png"]),
-        ("Idle Time Analysis", "multi_satellite_idle_plot.py", ["idle_time_comparison.png", "idle_time_bars.png"]),
-        ("Idle Time Summary", "multi_satellite_idle_bars.py", ["satellite_idle_bars.png"])
+        ("Idle Time Analysis", "multi_satellite_idle_plot.py", ["idle_time_comparison.png", "idle_time_bars.png"])
     ]
     
     success_count = 0

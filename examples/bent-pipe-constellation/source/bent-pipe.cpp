@@ -39,6 +39,7 @@
 #include <utilities.hpp>     // calcJulianDayFromYMD, calcSecSinceMidnight
 
 #include "PolicyFactory.hpp" // Scheduling policies
+#include "SpacingFactory.hpp" // Spacing strategies
 
 int main(int argc, char** argv) {
   // Set up variables
@@ -53,12 +54,14 @@ int main(int argc, char** argv) {
   std::vector<std::filesystem::path> rxGndFiles;         // gnd station RX files
   std::filesystem::path logDirectory;      // logs destination
   std::string policyStr = "sticky";        // default to sticky (original bent-pipe behavior)
+  std::string spacingStr = "bent-pipe";    // default to bent-pipe (original baseline behavior)
   // Parse command line argument(s)
-  if(argc < 3 || argc > 4) {
+  if(argc!=3 && argc!=4 && argc!=5) {
     std::cout << "Usage: " << argv[0]
               << " /path/to/configuration/"
               << " /path/to/logs/"
               << " [policy]"
+              << " [spacing]"
               << std::endl;
     std::exit(EXIT_SUCCESS);
   } else {
@@ -90,12 +93,14 @@ int main(int argc, char** argv) {
     }
     // Set log directory
     logDirectory = std::filesystem::path(argv[2]);
-    
-    // Set policy (optional 4th argument)
-    if(argc == 4) {
+    // Set policy (optional 3rd argument)
+    if(argc >= 4) {
       policyStr = std::string(argv[3]);
     }
-    
+    // Set spacing strategy (optional 4th argument)
+    if(argc >= 5) {
+      spacingStr = std::string(argv[4]);
+    }
   }
   // Set up log
   std::vector<cote::LogLevel> levels = {cote::LogLevel::INFO};
@@ -269,7 +274,9 @@ int main(int argc, char** argv) {
   }
   std::vector<cote::Channel> downlinks = std::vector<cote::Channel>();
   
+  // Create scheduling policy and spacing strategy
   std::unique_ptr<SchedulingPolicy> policy = PolicyFactory::createPolicy(policyStr);
+  std::unique_ptr<SpacingStrategy> spacingStrategy = SpacingFactory::createStrategy(spacingStr);
   
   // Simulation loop
   uint64_t stepCount = 0;
@@ -377,13 +384,18 @@ int main(int argc, char** argv) {
     const double distanceKm = cote::util::calcGreatCircleArc(
      CURR_LON, CURR_LAT, PREV_LON, PREV_LAT
     )*cote::cnst::WGS_84_A; // Earth "radius" in km
-    if(distanceKm>=satId2ThresholdKm[LEAD_SAT_ID]) {
-      log.evnt(cote::LogLevel::INFO,dateTime.toString(),"trigger-time");
-      for(size_t i=0; i<satellites.size(); i++) {
-        satId2Sensor[satellites.at(i).getID()]->triggerSense();
-        satId2ThresholdKm[satellites.at(i).getID()] =
-         threshCoeff*cote::util::calcAltitudeKm(satellites.at(i).getECIPosn());
-      }
+    
+    // Use spacing strategy to determine if observation should be triggered
+    if(spacingStrategy->shouldTriggerObservation(
+        currPosn, prevSensePosn, prevSenseDateTime, dateTime,
+        distanceKm, satId2ThresholdKm[LEAD_SAT_ID], LEAD_SAT_ID, satellites)) {
+      
+      // Execute observation according to spacing strategy
+      spacingStrategy->executeObservation(
+        satellites, satId2Sensor, satId2ThresholdKm, threshCoeff, dateTime, log);
+    } else {
+      // Update frame state for strategies that need it (e.g., frame-spaced)
+      spacingStrategy->updateFrameState(LEAD_SAT_ID, currPosn, dateTime, satId2Sensor);
     }
     // Log info every 1 sim steps
     if(stepCount%1==0) {

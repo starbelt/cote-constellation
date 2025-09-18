@@ -69,69 +69,32 @@ def get_top_satellites():
     for policy, policy_dir in policy_dirs.items():
         print(f"  Processing {policy} policy...")
         
-        # Method 1: Use tx-rx logs for basic tracking
-        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-        mbps_file = policy_dir / "meas-downlink-mbps.csv"
-        
-        if tx_rx_file.exists() and mbps_file.exists():
-            tx_rx_df = pd.read_csv(tx_rx_file)
-            mbps_df = pd.read_csv(mbps_file)
-            
-            tx_rx_df = tx_rx_df.iloc[:, :2]
-            mbps_df = mbps_df.iloc[:, :2]
-            
-            tx_rx_df.columns = ["timestamp", "satellite"]
-            mbps_df.columns = ["timestamp", "mbps"]
-            
-            tx_rx_df["timestamp"] = pd.to_datetime(tx_rx_df["timestamp"])
-            mbps_df["timestamp"] = pd.to_datetime(mbps_df["timestamp"])
-            mbps_df["mbps"] = pd.to_numeric(mbps_df["mbps"], errors='coerce')
-            
-            # Calculate totals from tx-rx logs
-            tx_rx_list = tx_rx_df.to_dict('records')
-            mbps_list = mbps_df.to_dict('records')
-            
-            for i, tx_row in enumerate(tx_rx_list):
-                sat = tx_row["satellite"]
-                if pd.isna(sat) or sat == "None":
-                    continue
-                    
-                if i < len(mbps_list):
-                    mbps = mbps_list[i]["mbps"]
-                    if pd.notna(mbps) and mbps > 0:
-                        data_mb = mbps * 100 / 8  # 100s timestep
-                        if sat not in all_totals:
-                            all_totals[sat] = {}
-                        if policy not in all_totals[sat]:
-                            all_totals[sat][policy] = 0
-                        all_totals[sat][policy] += data_mb
-        
-        # Method 2: ALSO check buffer files for satellites missed by tx-rx logs
-        # Check all 50 satellite buffer files for actual downlink activity
+        # Check buffer files for actual data downloaded (buffer decreases)
+        # Skip the inflated throughput calculation that was giving wrong totals
         for sat_num in range(50):
             sat_id = f"60518{sat_num:03d}-0"
-            buffer_file = policy_dir / f"meas-MB-buffered-sat-{sat_id.replace('-0', '')}.csv"
+            buffer_file = policy_dir / f"meas-MB-buffered-sat-00{sat_id.replace('-0', '')}.csv"
             
             if buffer_file.exists():
                 try:
                     buffer_df = pd.read_csv(buffer_file)
                     if len(buffer_df) > 1:
-                        buffer_col = f"MB-buffered-sat-{sat_id.replace('-0', '')}"
+                        buffer_col = f"MB-buffered-sat-00{sat_id.replace('-0', '')}"
                         if buffer_col in buffer_df.columns:
-                            # Calculate total data downloaded by summing buffer drops > 5MB
+                            # Calculate total data downloaded by looking at buffer decrease + tx-rx events
                             buffer_df['prev_value'] = buffer_df[buffer_col].shift(1)
-                            buffer_df['drop'] = buffer_df['prev_value'] - buffer_df[buffer_col]
+                            buffer_df['decrease'] = buffer_df['prev_value'] - buffer_df[buffer_col]
                             
-                            # Sum all significant drops (downloads)
-                            total_downloaded = buffer_df[buffer_df['drop'] > 5.0]['drop'].sum()
+                            # Sum all buffer decreases (data flowing out) - more accurate than arbitrary threshold
+                            total_downloaded = buffer_df[buffer_df['decrease'] > 0]['decrease'].sum()
                             
                             if total_downloaded > 0:
                                 if sat_id not in all_totals:
                                     all_totals[sat_id] = {}
                                 if policy not in all_totals[sat_id]:
                                     all_totals[sat_id][policy] = 0
-                                # Use the higher value between tx-rx logs and buffer analysis
-                                all_totals[sat_id][policy] = max(all_totals[sat_id][policy], total_downloaded)
+                                # Use actual buffer decreases as total downloaded
+                                all_totals[sat_id][policy] = total_downloaded
                 except Exception as e:
                     pass  # Skip files that can't be read
     

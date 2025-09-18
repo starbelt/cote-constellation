@@ -3,12 +3,20 @@ CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 Makefile
+CMakeLists.txt
 
 # Python
 p3-env/
 
+# macOS
+.DS_Store
+
 # Files
 *.csv
+
+#results
+*.png
+*.zip
 
 # Executables
 bent_pipe
