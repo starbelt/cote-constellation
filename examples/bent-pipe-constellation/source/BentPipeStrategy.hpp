@@ -1,13 +1,13 @@
-#ifndef ORBITSPACEDSTRATEGY_HPP
-#define ORBITSPACEDSTRATEGY_HPP
+#ifndef BENTPIPESTRATEGY_HPP
+#define BENTPIPESTRATEGY_HPP
 
 #include "SpacingStrategy.hpp"
 #include <utilities.hpp>
 
-class OrbitSpacedStrategy : public SpacingStrategy {
+class BentPipeStrategy : public SpacingStrategy {
 public:
-    OrbitSpacedStrategy() = default;
-    ~OrbitSpacedStrategy() = default;
+    BentPipeStrategy() = default;
+    ~BentPipeStrategy() = default;
 
     bool shouldTriggerObservation(
         const std::array<double,3>& currPosn,
@@ -19,8 +19,7 @@ public:
         uint32_t leadSatId,
         const std::vector<cote::Satellite>& satellites
     ) override {
-        // Same logic as CloseSpacedStrategy: trigger when distance exceeds threshold
-        // The orbital spacing (constellation.dat) provides the positioning difference
+        // Original bent-pipe logic: trigger when distance exceeds threshold
         return distanceKm >= thresholdKm;
     }
 
@@ -32,7 +31,7 @@ public:
         const cote::DateTime& dateTime,
         cote::Log& log
     ) override {
-        // Same triggering logic as CloseSpacedStrategy: all satellites trigger simultaneously
+        // Original bent-pipe logic: all satellites trigger sense simultaneously
         log.evnt(cote::LogLevel::INFO, dateTime.toString(), "trigger-time");
         for(size_t i = 0; i < satellites.size(); i++) {
             satId2Sensor[satellites.at(i).getID()]->triggerSense();
@@ -47,12 +46,12 @@ public:
         const cote::DateTime& dateTime,
         std::map<uint32_t, cote::Sensor*>& satId2Sensor
     ) override {
-        // Same as CloseSpacedStrategy: no special frame state needed
+        // Bent-pipe strategy doesn't need frame state updates
         // All satellites always trigger together
     }
 
     std::string getStrategyName() const override {
-        return "orbit-spaced";
+        return "bent-pipe";
     }
 };
 
