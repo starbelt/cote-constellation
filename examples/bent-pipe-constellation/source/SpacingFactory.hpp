@@ -2,7 +2,6 @@
 #define SPACINGFACTORY_HPP
 
 #include "SpacingStrategy.hpp"
-#include "BentPipeStrategy.hpp"
 #include "CloseSpacedStrategy.hpp"
 #include "FrameSpacedStrategy.hpp"
 #include "OrbitSpacedStrategy.hpp"
@@ -14,9 +13,8 @@
 class SpacingFactory {
 public:
     static std::unique_ptr<SpacingStrategy> createStrategy(const std::string& strategyName) {
-        if (strategyName == "bent-pipe" || strategyName == "bentpipe") {
-            return std::make_unique<BentPipeStrategy>();
-        } else if (strategyName == "close-spaced" || strategyName == "close" || strategyName == "closed") {
+        if (strategyName == "bent-pipe" || strategyName == "bentpipe" || 
+            strategyName == "close-spaced" || strategyName == "close" || strategyName == "closed") {
             return std::make_unique<CloseSpacedStrategy>();
         } else if (strategyName == "frame-spaced" || strategyName == "frame") {
             return std::make_unique<FrameSpacedStrategy>();
