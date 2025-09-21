@@ -31,7 +31,7 @@ echo "📁 Creating analysis structure in: $OUTPUT_DIR"
 BUFFER_MB=$(grep -v "^bits-per-sense" configuration/sensor.dat | cut -d',' -f5)
 
 # Define spacing strategies and link policies
-SPACING_STRATEGIES=("bent-pipe" "frame-spaced" "close-spaced" "orbit-spaced")
+SPACING_STRATEGIES=("close-spaced" "close-orbit-spaced" "frame-spaced" "orbit-spaced")
 POLICIES=("sticky" "fifo" "roundrobin" "random")
 
 echo "📋 Configuration:"

@@ -19,7 +19,7 @@ import shutil
 SCRIPT_DIR = Path(__file__).parent.absolute()
 LOGS_DIR = SCRIPT_DIR / "logs"
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
-SPACING_STRATEGIES = ["close-spaced", "frame-spaced", "orbit-spaced"]
+SPACING_STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 
 def read_config():
     """Read simulation configuration"""
