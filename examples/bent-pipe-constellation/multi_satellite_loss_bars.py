@@ -221,11 +221,13 @@ def create_loss_bar_chart(output_dir=None):
     
     # Always create the chart regardless of whether there are losses
     
-    # Save plot - use provided output directory or create timestamped one
+    # Save plot - use provided output directory or find constellation analysis folder
     if output_dir is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = SCRIPT_DIR / f"analysis_{timestamp}"
-        output_dir.mkdir(exist_ok=True)
+        output_dir = find_latest_constellation_analysis_folder()
+        if output_dir is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = SCRIPT_DIR / f"analysis_{timestamp}"
+            output_dir.mkdir(exist_ok=True)
     
     # Set consistent font family for the entire plot
     plt.rcParams['font.family'] = 'DejaVu Sans'
@@ -456,10 +458,12 @@ def create_bar_charts():
     
     config = read_config()
     
-    # Create output directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = SCRIPT_DIR / f"loss_bar_analysis_{timestamp}"
-    output_dir.mkdir(exist_ok=True)
+    # Use constellation analysis folder for output
+    output_dir = find_latest_constellation_analysis_folder()
+    if output_dir is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = SCRIPT_DIR / f"loss_bar_analysis_{timestamp}"
+        output_dir.mkdir(exist_ok=True)
     
     print(f"Output directory: {output_dir.name}")
     

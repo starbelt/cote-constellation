@@ -294,10 +294,8 @@ def create_bar_charts():
     
     config = read_config()
     
-    # Create output directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = SCRIPT_DIR / f"idle_bar_analysis_{timestamp}"
-    output_dir.mkdir(exist_ok=True)
+    # Use the latest constellation analysis folder (same as generate_spacing_comparison.py)
+    output_dir = find_latest_constellation_analysis_folder()
     
     print(f"Output directory: {output_dir.name}")
     
