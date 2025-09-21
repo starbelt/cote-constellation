@@ -4,6 +4,7 @@
 #include "SpacingStrategy.hpp"
 #include "BentPipeStrategy.hpp"
 #include "CloseSpacedStrategy.hpp"
+#include "CloseOrbitSpacedStrategy.hpp"
 #include "FrameSpacedStrategy.hpp"
 #include "OrbitSpacedStrategy.hpp"
 
@@ -18,18 +19,20 @@ public:
             return std::make_unique<BentPipeStrategy>();
         } else if (strategyName == "close-spaced" || strategyName == "close" || strategyName == "closed") {
             return std::make_unique<CloseSpacedStrategy>();
+        } else if (strategyName == "close-orbit-spaced" || strategyName == "close-orbit" || strategyName == "closeorbit") {
+            return std::make_unique<CloseOrbitSpacedStrategy>();
         } else if (strategyName == "frame-spaced" || strategyName == "frame") {
             return std::make_unique<FrameSpacedStrategy>();
         } else if (strategyName == "orbit-spaced" || strategyName == "orbit") {
             return std::make_unique<OrbitSpacedStrategy>();
         } else {
             throw std::invalid_argument("Unknown spacing strategy: " + strategyName + 
-                ". Valid options: bent-pipe, close-spaced, frame-spaced, orbit-spaced");
+                ". Valid options: bent-pipe, close-spaced, close-orbit-spaced, frame-spaced, orbit-spaced");
         }
     }
 
     static std::string getAvailableStrategies() {
-        return "bent-pipe, close-spaced, frame-spaced, orbit-spaced";
+        return "bent-pipe, close-spaced, close-orbit-spaced, frame-spaced, orbit-spaced";
     }
 };
 
