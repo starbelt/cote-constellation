@@ -113,6 +113,8 @@ int main(int argc, char** argv) {
     constellationFilename = "constellation_bent.dat";
   } else if(spacingStr == "close" || spacingStr == "close-spaced" || spacingStr == "closed") {
     constellationFilename = "constellation_close.dat";
+  } else if(spacingStr == "close-orbit-spaced" || spacingStr == "close-orbit" || spacingStr == "closeorbit") {
+    constellationFilename = "constellation_close_orbit.dat";
   } else if(spacingStr == "frame" || spacingStr == "frame-spaced") {
     constellationFilename = "constellation_frame.dat";
   } else if(spacingStr == "orbit" || spacingStr == "orbit-spaced") {
