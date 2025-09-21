@@ -169,7 +169,7 @@ def parse_communication_data_simple(strategy, policy, temp_dir, start_time_str=N
     
     return df[['hours', 'ground_station_active']], satellite_data, start_time
 
-def test_single_strategy(strategy="bent-pipe", policy="sticky", start_time_str=None, duration_seconds=None):
+def test_single_strategy(strategy="close-spaced", policy="sticky", start_time_str=None, duration_seconds=None):
     """Test processing a single strategy with optional parameters."""
     print(f"Testing {strategy} strategy...")
     
@@ -332,8 +332,8 @@ def test_single_strategy(strategy="bent-pipe", policy="sticky", start_time_str=N
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Generate satellite communication charts from archived data')
-    parser.add_argument('strategy', nargs='?', default='bent-pipe',
-                       help='Strategy to analyze (default: bent-pipe)')
+    parser.add_argument('strategy', nargs='?', default='close-spaced',
+                       help='Strategy to analyze (default: close-spaced)')
     parser.add_argument('policy', nargs='?', default='sticky',
                        help='Policy to analyze (default: sticky)')
     parser.add_argument('start_time', nargs='?', default=None,

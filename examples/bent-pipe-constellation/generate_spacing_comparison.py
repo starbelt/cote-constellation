@@ -68,33 +68,28 @@ def extract_metrics_from_logs(spacing_dir):
         total_loss_mb = 0
         total_idle_time = 0
         
-        # 1. Calculate total data downloaded (buffer drain analysis) - limit to 10 satellites for speed
+        # 1. Calculate total data downloaded (buffer drain analysis) - use same method as buffer_bars
         buffer_files = [f for f in os.listdir(policy_dir) if f.startswith('meas-MB-buffered-sat-') and f.endswith('.csv')]
         
         if buffer_files:
             try:
-                # Process only first 10 buffer files for faster analysis
-                sample_files = buffer_files[:10] if len(buffer_files) > 10 else buffer_files
-                for buffer_file in sample_files:
+                # Process ALL buffer files (not just sample) for accurate totals
+                for buffer_file in buffer_files:
                     buffer_path = policy_dir / buffer_file
                     if buffer_path.exists():
                         try:
                             buffer_df = pd.read_csv(buffer_path)
-                            if len(buffer_df.columns) >= 2:
-                                buffer_values = pd.to_numeric(buffer_df.iloc[:, 1], errors='coerce').dropna()
+                            if len(buffer_df) > 1 and len(buffer_df.columns) >= 2:
+                                # Use same method as multi_satellite_buffer_bars.py
+                                buffer_col = buffer_df.columns[1]  # Second column has buffer data
+                                buffer_df['prev_value'] = buffer_df[buffer_col].shift(1)
+                                buffer_df['decrease'] = buffer_df['prev_value'] - buffer_df[buffer_col]
                                 
-                                # Sum all significant buffer drops (data leaving satellite)
-                                for i in range(1, len(buffer_values)):
-                                    drop = buffer_values.iloc[i-1] - buffer_values.iloc[i]
-                                    if drop > 1.0:  # Count meaningful drops > 1MB
-                                        total_downloaded_mb += drop
+                                # Sum all buffer decreases (data flowing out)
+                                satellite_downloaded = buffer_df[buffer_df['decrease'] > 0]['decrease'].sum()
+                                total_downloaded_mb += satellite_downloaded
                         except Exception:
                             continue
-                
-                # Scale up based on sample size
-                if len(sample_files) < len(buffer_files):
-                    scale_factor = len(buffer_files) / len(sample_files)
-                    total_downloaded_mb *= scale_factor
                     
             except Exception:
                 total_downloaded_mb = 0
@@ -160,9 +155,9 @@ def extract_metrics_from_logs(spacing_dir):
 def generate_matrix_comparison(master_dir, metric_name, title, filename):
     """Generate a single 4x4 matrix comparison for the specified metric"""
     
-    spacings = ['bent-pipe', 'close-spaced', 'frame-spaced', 'orbit-spaced']
+    spacings = ['close-spaced', 'frame-spaced', 'orbit-spaced', 'close-orbit-spaced']
     policies = ['sticky', 'fifo', 'roundrobin', 'random']
-    spacing_labels = ['Bent\nPipe', 'Close\nSpaced', 'Frame\nSpaced', 'Orbit\nSpaced']
+    spacing_labels = ['Close\nSpaced', 'Frame\nSpaced', 'Orbit\nSpaced', 'Close-Orbit\nSpaced']
     policy_labels = ['STICKY', 'FIFO', 'ROUNDROBIN', 'RANDOM']
     
     # Extract data from all spacing strategies
