@@ -16,7 +16,7 @@ import shutil
 
 # Configuration
 SCRIPT_DIR = Path(__file__).parent.absolute()
-SPACING_STRATEGIES = ["bent-pipe", "close-spaced", "frame-spaced", "orbit-spaced"]
+SPACING_STRATEGIES = ["close-spaced", "frame-spaced", "orbit-spaced"]
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
 
 def find_latest_constellation_analysis_folder(script_dir):
