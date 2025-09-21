@@ -3,13 +3,13 @@
 Cross-Spacing Comparison Analysis
 
 Generates comparison charts analyzing policy performance across different spacing strategies.
-Creates summary visualizations for the multi-spacing research matrix using REAL data.
+Creates 3 matrix visualizations (loss, idle, total download) for the multi-spacing research.
+Automatically finds the latest constellation_analysis folder.
 """
 
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-import argparse
 import json
 import glob
 import zipfile
@@ -17,8 +17,26 @@ import os
 from pathlib import Path
 from datetime import datetime
 
+# Configuration
+SCRIPT_DIR = Path(__file__).parent.absolute()
+SPACING_STRATEGIES = ["bent-pipe", "close-spaced", "frame-spaced", "orbit-spaced"]
+POLICIES = ["sticky", "fifo", "roundrobin", "random"]
+
+def find_latest_constellation_analysis_folder():
+    """Find the most recent constellation_analysis folder."""
+    constellation_folders = [d for d in SCRIPT_DIR.iterdir() 
+                           if d.is_dir() and d.name.startswith('constellation_analysis_')]
+    
+    if not constellation_folders:
+        raise FileNotFoundError("No constellation_analysis folders found")
+    
+    # Sort by folder name (which includes timestamp) to get the latest
+    latest_folder = sorted(constellation_folders, key=lambda x: x.name)[-1]
+    print(f"Using constellation analysis folder: {latest_folder.name}")
+    return latest_folder
+
 def extract_metrics_from_logs(spacing_dir):
-    """Extract real metrics from simulation logs"""
+    """Extract comprehensive metrics from simulation logs (optimized)"""
     logs_zip = spacing_dir / "simulation_logs.zip"
     if not logs_zip.exists():
         return None
@@ -30,57 +48,107 @@ def extract_metrics_from_logs(spacing_dir):
     temp_dir = spacing_dir / "temp_logs"
     temp_dir.mkdir(exist_ok=True)
     
-    with zipfile.ZipFile(logs_zip, 'r') as zip_ref:
-        zip_ref.extractall(temp_dir)
+    try:
+        with zipfile.ZipFile(logs_zip, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+    except Exception as e:
+        print(f"    Error extracting {logs_zip}: {e}")
+        if temp_dir.exists():
+            import shutil
+            shutil.rmtree(temp_dir)
+        return None
     
     for policy in policies:
         policy_dir = temp_dir / policy
         if not policy_dir.exists():
             continue
             
-        # Count total trigger events
-        trigger_file = policy_dir / "evnt-trigger-time.csv"
-        total_triggers = 0
-        if trigger_file.exists():
-            with open(trigger_file, 'r') as f:
-                total_triggers = len(f.readlines()) - 1  # Subtract header
-        
-        # Calculate total data RETRIEVED FROM SATELLITE using buffer drain analysis
+        # Initialize metrics
         total_downloaded_mb = 0
+        total_loss_mb = 0
+        total_idle_time = 0
         
-        # Look for individual satellite buffer files
+        # 1. Calculate total data downloaded (buffer drain analysis) - limit to 10 satellites for speed
         buffer_files = [f for f in os.listdir(policy_dir) if f.startswith('meas-MB-buffered-sat-') and f.endswith('.csv')]
         
         if buffer_files:
             try:
-                # Process satellite buffer files efficiently
-                processed_count = 0
-                for buffer_file in buffer_files:
+                # Process only first 10 buffer files for faster analysis
+                sample_files = buffer_files[:10] if len(buffer_files) > 10 else buffer_files
+                for buffer_file in sample_files:
                     buffer_path = policy_dir / buffer_file
                     if buffer_path.exists():
                         try:
                             buffer_df = pd.read_csv(buffer_path)
                             if len(buffer_df.columns) >= 2:
-                                # Get buffer values
                                 buffer_values = pd.to_numeric(buffer_df.iloc[:, 1], errors='coerce').dropna()
                                 
-                                # Find significant buffer drops (data leaving satellite)
+                                # Sum all significant buffer drops (data leaving satellite)
                                 for i in range(1, len(buffer_values)):
                                     drop = buffer_values.iloc[i-1] - buffer_values.iloc[i]
                                     if drop > 1.0:  # Count meaningful drops > 1MB
                                         total_downloaded_mb += drop
-                                
-                                processed_count += 1
-                        except Exception as e:
-                            continue  # Skip problematic files
-                        
-            except Exception as e:
+                        except Exception:
+                            continue
+                
+                # Scale up based on sample size
+                if len(sample_files) < len(buffer_files):
+                    scale_factor = len(buffer_files) / len(sample_files)
+                    total_downloaded_mb *= scale_factor
+                    
+            except Exception:
                 total_downloaded_mb = 0
         
+        # 2. Calculate REAL data loss from buffer overflow logs (not estimates!)
+        try:
+            # Look for actual buffer overflow logs generated by the simulation
+            overflow_files = [f for f in os.listdir(policy_dir) if f.startswith('meas-buffer-overflow-sat-') and f.endswith('.csv')]
+            
+            for overflow_file in overflow_files:
+                overflow_path = policy_dir / overflow_file
+                if overflow_path.exists():
+                    try:
+                        overflow_df = pd.read_csv(overflow_path)
+                        if len(overflow_df) > 1 and len(overflow_df.columns) >= 2:
+                            # Handle the potential empty third column
+                            if len(overflow_df.columns) == 3:
+                                overflow_df = overflow_df.iloc[:, :2]
+                            
+                            overflow_df.columns = ['timestamp', 'cumulative_loss_mb']
+                            
+                            # Get the final cumulative loss value for this satellite
+                            cumulative_loss_values = pd.to_numeric(overflow_df['cumulative_loss_mb'], errors='coerce').dropna()
+                            if len(cumulative_loss_values) > 0:
+                                # Use the maximum cumulative loss (final value)
+                                satellite_total_loss = cumulative_loss_values.max()
+                                total_loss_mb += satellite_total_loss
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        
+        # 3. Calculate idle time from downlink activity
+        try:
+            tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
+            if tx_rx_file.exists():
+                tx_rx_df = pd.read_csv(tx_rx_file)
+                if len(tx_rx_df) > 1:
+                    # Handle the empty third column
+                    if len(tx_rx_df.columns) == 3:
+                        tx_rx_df = tx_rx_df.iloc[:, :2]
+                    
+                    tx_rx_df.columns = ['timestamp', 'satellite']
+                    
+                    # Count idle periods (when satellite is 'None' or missing)
+                    idle_count = len(tx_rx_df[tx_rx_df['satellite'].isna() | (tx_rx_df['satellite'] == 'None')])
+                    total_idle_time = idle_count  # In timesteps
+        except Exception:
+            pass
+        
         metrics[policy] = {
-            'total_triggers': total_triggers,
             'total_downloaded_mb': total_downloaded_mb,
-            'buffer_files_found': len(buffer_files) if buffer_files else 0
+            'total_loss_mb': total_loss_mb,
+            'total_idle_time': total_idle_time
         }
     
     # Clean up temp directory
@@ -89,80 +157,15 @@ def extract_metrics_from_logs(spacing_dir):
     
     return metrics
 
-def generate_spacing_strategy_comparison(master_dir, output_dir):
-    """Generate 2x2 grid: each quadrant shows one policy with 4 spacing strategy bars"""
+def generate_matrix_comparison(master_dir, metric_name, title, filename):
+    """Generate a single 4x4 matrix comparison for the specified metric"""
     
     spacings = ['bent-pipe', 'close-spaced', 'frame-spaced', 'orbit-spaced']
     policies = ['sticky', 'fifo', 'roundrobin', 'random']
     spacing_labels = ['Bent\nPipe', 'Close\nSpaced', 'Frame\nSpaced', 'Orbit\nSpaced']
-    
-    # Extract real data from all spacing strategies
-    all_data = {}
-    for spacing in spacings:
-        spacing_dir = master_dir / spacing
-        if spacing_dir.exists():
-            metrics = extract_metrics_from_logs(spacing_dir)
-            if metrics:
-                all_data[spacing] = metrics
-    
-    if not all_data:
-        return None
-    
-    # Create 2x2 subplot grid
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
-    axes = [ax1, ax2, ax3, ax4]
-    colors = ['#e74c3c', '#f39c12', '#27ae60', '#3498db']  # Red, Orange, Green, Blue
-    
-    for i, policy in enumerate(policies):
-        ax = axes[i]
-        
-        # Extract total downloaded data for this policy across all spacing strategies
-        data_values = []
-        for spacing in spacings:
-            if spacing in all_data and policy in all_data[spacing]:
-                data_values.append(all_data[spacing][policy]['total_downloaded_mb'])
-            else:
-                data_values.append(0)
-        
-        # Create bar chart
-        bars = ax.bar(spacing_labels, data_values, color=colors, alpha=0.8, 
-                      edgecolor='black', linewidth=1)
-        
-        # Add value labels on bars
-        for bar, value in zip(bars, data_values):
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height + max(data_values) * 0.01,
-                   f'{value:.0f} MB', ha='center', va='bottom', fontweight='bold', fontsize=10)
-        
-        # Customize subplot
-        ax.set_title(f'{policy.upper()} Policy\nData Retrieved by Spacing Strategy', 
-                    fontsize=12, fontweight='bold', pad=15)
-        ax.set_ylabel('Data Retrieved (MB)', fontsize=10, fontweight='bold')
-        ax.set_ylim(0, max(data_values) * 1.15 if data_values else 100)
-        ax.grid(True, alpha=0.3, axis='y')
-        ax.tick_params(axis='x', rotation=0)
-    
-    plt.suptitle('Spacing Strategy Performance Comparison\n' +
-                'Data Retrieved: Higher Values = More Data Downloaded', 
-                fontsize=16, fontweight='bold', y=0.98)
-    plt.tight_layout()
-    
-    # Save chart
-    output_path = output_dir / "spacing_strategy_comparison.png"
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    return output_path
-
-def generate_policy_performance_matrix(master_dir, output_dir):
-    """Generate heatmap matrix: rows=policies, cols=spacing strategies"""
-    
-    spacings = ['bent-pipe', 'close-spaced', 'frame-spaced', 'orbit-spaced']
-    policies = ['sticky', 'fifo', 'roundrobin', 'random']
-    spacing_labels = ['Bent Pipe', 'Close Spaced', 'Frame Spaced', 'Orbit Spaced']
     policy_labels = ['STICKY', 'FIFO', 'ROUNDROBIN', 'RANDOM']
     
-    # Extract real data from all spacing strategies
+    # Extract data from all spacing strategies
     all_data = {}
     for spacing in spacings:
         spacing_dir = master_dir / spacing
@@ -172,22 +175,29 @@ def generate_policy_performance_matrix(master_dir, output_dir):
                 all_data[spacing] = metrics
     
     if not all_data:
+        print(f"No data found for {metric_name} matrix")
         return None
     
-    # Create performance matrix (policies x spacings)
+    # Build performance matrix
     performance_matrix = np.zeros((len(policies), len(spacings)))
     
     for i, policy in enumerate(policies):
         for j, spacing in enumerate(spacings):
             if spacing in all_data and policy in all_data[spacing]:
-                performance_matrix[i, j] = all_data[spacing][policy]['total_downloaded_mb']
+                performance_matrix[i, j] = all_data[spacing][policy][metric_name]
     
-    # Create heatmap
-    fig, ax = plt.subplots(figsize=(14, 10))
+    # Create the matrix heatmap
+    fig, ax = plt.subplots(figsize=(12, 10))
     
-    # Use Blues colormap (darker = more data downloaded)
-    max_value = np.max(performance_matrix) if np.max(performance_matrix) > 0 else 1000
-    im = ax.imshow(performance_matrix, cmap='Blues', aspect='auto', vmin=0, vmax=max_value)
+    # Choose colormap based on metric (lower is better for loss/idle, higher for download)
+    if metric_name in ['total_loss_mb', 'total_idle_time']:
+        cmap = 'Reds'  # Standard reds (dark red = bad/high values, light = good/low values)
+        better_text = "Lower Values = Better Performance"
+    else:
+        cmap = 'Greens'  # Standard greens (dark green = good/high values, light = poor/low values)
+        better_text = "Higher Values = Better Performance"
+    
+    im = ax.imshow(performance_matrix, cmap=cmap, aspect='auto')
     
     # Set ticks and labels
     ax.set_xticks(np.arange(len(spacings)))
@@ -196,23 +206,35 @@ def generate_policy_performance_matrix(master_dir, output_dir):
     ax.set_yticklabels(policy_labels, fontsize=12, fontweight='bold')
     
     # Add colorbar
+    max_value = np.max(performance_matrix)
+    min_value = np.min(performance_matrix)
     cbar = plt.colorbar(im, ax=ax, shrink=0.8)
-    cbar.set_label('Data Retrieved (MB)', rotation=270, labelpad=20, 
-                   fontsize=12, fontweight='bold')
+    
+    # Set colorbar label based on metric
+    if metric_name == 'total_downloaded_mb':
+        cbar.set_label('Data Downloaded (MB)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
+    elif metric_name == 'total_loss_mb':
+        cbar.set_label('Data Loss (MB)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
+    elif metric_name == 'total_idle_time':
+        cbar.set_label('Idle Time (timesteps)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
+    
     cbar.ax.tick_params(labelsize=10)
     
-    # Add text annotations with real values
+    # Add text annotations with values (always black for readability)
     for i in range(len(policies)):
         for j in range(len(spacings)):
             value = performance_matrix[i, j]
-            # Use white text on dark areas, black on light areas
-            color = 'white' if value > (max_value * 0.6) else 'black'
-            text = ax.text(j, i, f'{value:.0f} MB', ha="center", va="center", 
-                         color=color, fontweight='bold', fontsize=11)
+            
+            # Format value based on metric type
+            if metric_name == 'total_idle_time':
+                text = ax.text(j, i, f'{value:.0f}', ha="center", va="center", 
+                             color='black', fontweight='bold', fontsize=11)
+            else:
+                text = ax.text(j, i, f'{value:.1f}', ha="center", va="center", 
+                             color='black', fontweight='bold', fontsize=11)
     
     # Titles and labels
-    ax.set_title('Policy-Spacing Performance Matrix\n' +
-                'Data Retrieved: Higher Values = More Data Downloaded', 
+    ax.set_title(f'{title}\n{better_text}', 
                 fontsize=16, fontweight='bold', pad=25)
     ax.set_xlabel('Spacing Strategy', fontsize=14, fontweight='bold')
     ax.set_ylabel('Scheduling Policy', fontsize=14, fontweight='bold')
@@ -226,26 +248,65 @@ def generate_policy_performance_matrix(master_dir, output_dir):
     plt.tight_layout()
     
     # Save chart
-    output_path = output_dir / "policy_spacing_performance_matrix.png"
+    output_path = master_dir / filename
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     
+    print(f"Generated: {output_path}")
     return output_path
 
 def main():
-    parser = argparse.ArgumentParser(description='Cross-Spacing Comparison Analysis')
-    parser.add_argument('--input-dir', required=True, help='Master analysis directory containing spacing subdirectories')
-    args = parser.parse_args()
-    
-    master_dir = Path(args.input_dir)
-    if not master_dir.exists():
+    """Generate all three matrix comparisons automatically"""
+    try:
+        # Find the latest constellation analysis folder
+        master_dir = find_latest_constellation_analysis_folder()
+        
+        print("Generating spacing strategy comparison matrices...")
+        
+        # Generate three comparison matrices
+        download_matrix = generate_matrix_comparison(
+            master_dir, 
+            'total_downloaded_mb', 
+            'Data Download Performance by Strategy × Policy',
+            'spacing_download_matrix.png'
+        )
+        
+        loss_matrix = generate_matrix_comparison(
+            master_dir, 
+            'total_loss_mb', 
+            'Data Loss Performance by Strategy × Policy',
+            'spacing_loss_matrix.png'
+        )
+        
+        idle_matrix = generate_matrix_comparison(
+            master_dir, 
+            'total_idle_time', 
+            'Idle Time Performance by Strategy × Policy',
+            'spacing_idle_matrix.png'
+        )
+        
+        # Summary
+        print("\n" + "="*60)
+        print("SPACING STRATEGY MATRIX COMPARISON COMPLETE!")
+        print("="*60)
+        
+        if download_matrix:
+            print(f"📊 Download Matrix: {download_matrix.name}")
+        if loss_matrix:
+            print(f"📉 Loss Matrix: {loss_matrix.name}")
+        if idle_matrix:
+            print(f"⏱️  Idle Time Matrix: {idle_matrix.name}")
+        
+        print(f"\n📁 All matrices saved in: {master_dir.name}")
+        
+        return 0
+        
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
         return 1
-    
-    # Generate comparison charts with REAL data
-    matrix_chart = generate_policy_performance_matrix(master_dir, master_dir)
-    comparison_chart = generate_spacing_strategy_comparison(master_dir, master_dir)
-    
-    return 0
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return 1
 
 if __name__ == "__main__":
     exit(main())
