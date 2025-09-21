@@ -3,7 +3,7 @@
 Multi-Satellite Data Loss Bar Chart Analysis
 
 Shows total data lost per policy with clean bar chart visualization
-ordered by performance (least loss first).
+for each spacing strategy with policies as bars within each chart.
 """
 
 import pandas as pd
@@ -12,11 +12,14 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
 import zipfile
+import tempfile
+import shutil
 
 # Configuration - use absolute paths
 SCRIPT_DIR = Path(__file__).parent.absolute()
 LOGS_DIR = SCRIPT_DIR / "logs"
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
+SPACING_STRATEGIES = ["bent-pipe", "close-spaced", "frame-spaced", "orbit-spaced"]
 
 def read_config():
     """Read simulation configuration"""
@@ -52,8 +55,107 @@ def read_config():
     
     return config
 
+def find_latest_constellation_analysis_folder():
+    """Find the most recent constellation_analysis_* folder"""
+    # Look for constellation_analysis_* folders in parent directories
+    current_dir = SCRIPT_DIR
+    
+    while current_dir != current_dir.parent:
+        constellation_folders = [f for f in current_dir.iterdir() 
+                               if f.is_dir() and f.name.startswith('constellation_analysis_')]
+        
+        if constellation_folders:
+            # Sort by modification time (newest first)
+            latest_folder = max(constellation_folders, key=lambda x: x.stat().st_mtime)
+            print(f"Using latest analysis folder: {latest_folder.name}")
+            return latest_folder
+        
+        current_dir = current_dir.parent
+    
+    print("No constellation_analysis_* folder found!")
+    return None
+
+def get_loss_data_for_strategy(strategy, constellation_folder):
+    """Extract loss data for a specific strategy from constellation analysis folder"""
+    strategy_folder = constellation_folder / strategy
+    if not strategy_folder.exists():
+        print(f"  Strategy folder not found: {strategy}")
+        return {}
+    
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
+    if not simulation_logs_zip.exists():
+        print(f"  No simulation_logs.zip found for {strategy}")
+        return {}
+    
+    loss_results = {}
+    
+    # Extract and process each policy
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        
+        # Extract the ZIP file
+        with zipfile.ZipFile(simulation_logs_zip, 'r') as zip_file:
+            zip_file.extractall(temp_path)
+        
+        # Process each policy subdirectory
+        for policy in POLICIES:
+            policy_dir = temp_path / policy
+            if not policy_dir.exists():
+                print(f"    Policy {policy} not found for {strategy}")
+                continue
+            
+            # Calculate loss data for this policy using real overflow logs
+            policy_loss_data = calculate_loss_for_policy(policy_dir)
+            if policy_loss_data is not None:
+                loss_results[policy] = policy_loss_data
+    
+    return loss_results
+
+def calculate_loss_for_policy(policy_dir):
+    """Calculate total data loss for a specific policy directory using real overflow logs"""
+    # Find all buffer overflow files
+    overflow_files = list(policy_dir.glob("meas-buffer-overflow-sat-*.csv"))
+    
+    if not overflow_files:
+        # No overflow files means no loss
+        return 0.0
+    
+    total_loss_mb = 0.0
+    
+    for overflow_file in overflow_files:
+        try:
+            # Read overflow data
+            df = pd.read_csv(overflow_file)
+            
+            if df.empty:
+                continue
+            
+            # The overflow data is CUMULATIVE - take the maximum value (final cumulative loss)
+            # Following the logic from generate_spacing_comparison.py
+            
+            # Handle 3-column format by taking first 2 columns
+            if len(df.columns) == 3:
+                df = df.iloc[:, :2]
+            
+            # Rename columns for clarity
+            df.columns = ['timestamp', 'cumulative_loss_mb']
+            
+            # Get the final cumulative loss value for this satellite
+            cumulative_loss_values = pd.to_numeric(df['cumulative_loss_mb'], errors='coerce').dropna()
+            
+            if len(cumulative_loss_values) > 0:
+                # Use the maximum cumulative loss (final value) - this is the total loss for this satellite
+                satellite_total_loss = cumulative_loss_values.max()
+                total_loss_mb += satellite_total_loss
+                
+        except Exception as e:
+            print(f"    Error processing {overflow_file.name}: {e}")
+            continue
+    
+    return total_loss_mb
+
 def get_policy_dirs():
-    """Get policy directories"""
+    """Get policy directories (legacy function for backward compatibility)"""
     dirs = {}
     for policy in POLICIES:
         policy_dir = LOGS_DIR / policy
@@ -160,7 +262,7 @@ def create_loss_bar_chart(output_dir=None):
     if all_zero:
         # Special handling for zero loss case - use green colors to indicate good performance
         bar_colors = ['#d4edda'] * len(sorted_policies)  # Light green for all
-        title_suffix = "No Data Loss Detected - Excellent Performance!"
+        title_suffix = "No Data Loss Detected!"
     else:
         # Use red gradient for losses (lighter red = better performance = less loss)
         red_colors = ['#fee5d9', '#fcbba1', '#fc9272', '#de2d26'][:len(sorted_policies)]
@@ -256,30 +358,127 @@ def create_loss_bar_chart(output_dir=None):
     plt.tight_layout()
     plt.savefig(output_dir / "satellite_loss_bars.png", dpi=300, bbox_inches='tight')
     plt.close()
-    
-    # Reset matplotlib settings to default
-    plt.rcParams.update(plt.rcParamsDefault)
-    
-    if output_dir and output_dir.parent == SCRIPT_DIR:  # Only print if we created our own directory
-        print(f"Generated satellite loss bar chart -> {output_dir}/satellite_loss_bars.png")
-        if all_zero:
-            print("Result: No data loss detected across all policies - excellent buffer management!")
-        elif sorted_policies:
-            print(f"Loss ranking (best to worst): {' < '.join([p.upper() for p in sorted_policies])}")
-            print(f"Total loss across all policies: {total_loss:.1f} MB")
-        print(f"For detailed buffer analysis, use the buffer plot script.")
-
-def main():
-    """Main function"""
-    print("Multi-Satellite Data Loss Bar Chart Analysis")
-    
-    policy_dirs = get_policy_dirs()
-    if not policy_dirs:
-        print("No simulation logs found!")
-        print("Please run simulations first using the scripts in the scripts/ directory.")
+def create_bar_chart_for_strategy(strategy, loss_results, config, output_dir):
+    """Create bar chart for a specific strategy showing policy performance"""
+    if loss_results is None:
+        print(f"  No data for strategy: {strategy}")
         return
     
-    create_loss_bar_chart()  # Use default behavior when run standalone
+    # Set consistent font family
+    plt.rcParams['font.family'] = 'DejaVu Sans'
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
+    
+    # Create figure
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    
+    # Prepare data for plotting
+    policies = POLICIES
+    totals = [loss_results.get(p, 0) for p in policies]
+    
+    # Create colors - use red tones for loss (darker = worse)
+    colors = {'sticky': '#FF6B6B', 'fifo': '#FF4757', 'roundrobin': '#FF3838', 'random': '#FF1E1E'}
+    bar_colors = [colors.get(policy.lower(), '#888888') for policy in policies]
+    
+    # Create the bar chart
+    bars = ax.bar(policies, totals, color=bar_colors, alpha=0.8, edgecolor='black', linewidth=1)
+    
+    # Customize the plot
+    strategy_display = strategy.replace('-', ' ').title()
+    ax.set_ylabel('Total Data Loss (MB)', fontweight='bold', fontsize=12)
+    ax.set_xlabel('Scheduling Policy', fontweight='bold', fontsize=12)
+    ax.set_title(f'Total Data Loss by Policy - {strategy_display} Strategy\n(Constellation Performance Comparison)', 
+                fontweight='bold', fontsize=14, pad=20)
+    
+    # Add value labels on bars
+    if totals and max(totals) > 0:
+        for i, (bar, total) in enumerate(zip(bars, totals)):
+            height = bar.get_height()
+            # Show total MB lost
+            ax.text(bar.get_x() + bar.get_width()/2., height + max(totals)*0.01,
+                    f'{total:.1f} MB',
+                    ha='center', va='bottom', fontweight='bold', fontsize=10, color='black')
+    elif all(t == 0 for t in totals):
+        # Special case when no loss occurred
+        ax.text(0.5, 0.5, 'No Data Loss Detected\n(Excellent Buffer Management!)', 
+                transform=ax.transAxes, ha='center', va='center',
+                fontsize=16, fontweight='bold', color='green',
+                bbox=dict(boxstyle="round,pad=0.3", facecolor='lightgreen', alpha=0.7))
+    
+    # Improve styling
+    ax.grid(True, alpha=0.3, axis='y')
+    ax.set_axisbelow(True)
+    
+    # Smart y-axis scaling
+    if totals and max(totals) > 0:
+        max_value = max(totals)
+        ax.set_ylim(0, max_value * 1.15)
+    else:
+        ax.set_ylim(0, 1)  # Show a small range when no loss
+    
+    # Style the plot
+    for label in ax.get_xticklabels():
+        label.set_fontweight('bold')
+        label.set_family('DejaVu Sans')
+    
+    for label in ax.get_yticklabels():
+        label.set_family('DejaVu Sans')
+    
+    plt.tight_layout()
+    
+    # Save the plot
+    output_path = output_dir / f"loss_bars_{strategy}_strategy.png"
+    plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+    
+    print(f"  Generated loss bar chart for {strategy} -> {output_path.name}")
+    
+    # Print ranking for this strategy (lower loss is better)
+    if any(totals):
+        sorted_policies = sorted([(p, loss_results.get(p, 0)) for p in POLICIES], key=lambda x: x[1])
+        ranking = " > ".join([policy.upper() for policy, total in sorted_policies if total >= 0])
+        if ranking:
+            print(f"  {strategy_display} strategy ranking (best to worst): {ranking}")
+            total_strategy_loss = sum(totals)
+            if total_strategy_loss > 0:
+                print(f"  Total loss for {strategy}: {total_strategy_loss:.1f} MB")
+            else:
+                print(f"  {strategy_display}: No data loss detected!")
+    else:
+        print(f"  {strategy_display}: No data loss detected!")
+
+def create_bar_charts():
+    """Create bar charts for all strategies"""
+    print("Multi-Satellite Data Loss Bar Chart Analysis")
+    
+    constellation_folder = find_latest_constellation_analysis_folder()
+    if not constellation_folder:
+        return
+    
+    config = read_config()
+    
+    # Create output directory
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = SCRIPT_DIR / f"loss_bar_analysis_{timestamp}"
+    output_dir.mkdir(exist_ok=True)
+    
+    print(f"Output directory: {output_dir.name}")
+    
+    # Process each strategy
+    for strategy in SPACING_STRATEGIES:
+        print(f"\nProcessing {strategy} strategy...")
+        
+        # Get loss data for this strategy
+        loss_results = get_loss_data_for_strategy(strategy, constellation_folder)
+        
+        # Create bar chart for this strategy
+        create_bar_chart_for_strategy(strategy, loss_results, config, output_dir)
+    
+    print(f"\nAll charts generated in: {output_dir}")
+    print("Charts show total data loss per policy for each spacing strategy.")
+
+def main():
+    """Main function to run analysis"""
+    create_bar_charts()
 
 if __name__ == "__main__":
     main()
