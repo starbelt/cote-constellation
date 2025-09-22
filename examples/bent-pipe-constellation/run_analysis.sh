@@ -1,22 +1,14 @@
 #!/bin/bash
-# Complete Spacing Strategy & Link Policy Analysis Pipeline
+# Complete Spacing Strategy & Link Policy Simulation Pipeline
 # Runs simulations for all 4x4 combinations and organizes results
 
 set -e  # Exit on any error
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VENV_PATH="$SCRIPT_DIR/../../.venv"
 
 echo "============================================================"
-echo "COMPLETE 4×4 SPACING & LINK POLICY ANALYSIS PIPELINE"
+echo "COMPLETE 4×4 SPACING & LINK POLICY SIMULATION PIPELINE"
 echo "============================================================"
-
-# Check if virtual environment exists
-if [ ! -d "$VENV_PATH" ]; then
-    echo "❌ Virtual environment not found at $VENV_PATH"
-    echo "Please run the setup script first."
-    exit 1
-fi
 
 cd "$SCRIPT_DIR"
 
@@ -25,7 +17,7 @@ timestamp=$(date +"%Y%m%d_%H%M%S")
 OUTPUT_DIR="constellation_analysis_${timestamp}"
 mkdir -p "$OUTPUT_DIR"
 
-echo "📁 Creating analysis structure in: $OUTPUT_DIR"
+echo "📁 Creating simulation structure in: $OUTPUT_DIR"
 
 # Read current buffer configuration
 BUFFER_MB=$(grep -v "^bits-per-sense" configuration/sensor.dat | cut -d',' -f5)
@@ -59,33 +51,47 @@ echo "============================================================"
 total_runs=0
 successful_runs=0
 
+# Clean up any existing logs first
+echo "🧹 Cleaning up existing logs..."
+rm -rf logs/*
+
 for spacing in "${SPACING_STRATEGIES[@]}"; do
     echo ""
     echo "📡 SPACING STRATEGY: $(echo $spacing | tr '[:lower:]' '[:upper:]')"
     echo "------------------------------------------------------------"
     
+    # Create temporary directory for this spacing strategy's logs
+    temp_spacing_dir="temp_${spacing}"
+    rm -rf "$temp_spacing_dir"
+    mkdir -p "$temp_spacing_dir"
+    
     for policy in "${POLICIES[@]}"; do
         echo ""
         echo "🎯 Running $spacing with $(echo $policy | tr '[:lower:]' '[:upper:]') policy..."
         
-        # Create logs directory for this combination
-        logs_dir="logs/${spacing}_${policy}"
-        rm -rf "$logs_dir"
-        mkdir -p "$logs_dir"
+        # Clean simulation logs directory for each run
+        rm -rf logs/*
+        mkdir -p logs
         
         start_time=$(date +%s)
         total_runs=$((total_runs + 1))
         
-        # Run simulation
-        echo "   Command: ./build/bent_pipe configuration $logs_dir $policy $spacing"
-        if ./build/bent_pipe configuration "$logs_dir" "$policy" "$spacing" 2>/dev/null; then
+        # Run simulation directly to logs directory
+        echo "   Command: ./build/bent_pipe configuration logs $policy $spacing"
+        if ./build/bent_pipe configuration "logs" "$policy" "$spacing" 2>/dev/null; then
             end_time=$(date +%s)
             duration=$((end_time - start_time))
-            file_count=$(ls -1 "$logs_dir"/*.csv 2>/dev/null | wc -l | tr -d ' ')
+            file_count=$(ls -1 logs/*.csv 2>/dev/null | wc -l | tr -d ' ')
             
             if [ "$file_count" -gt 0 ]; then
                 echo "   ✅ Success! (${duration}s, ${file_count} files)"
                 successful_runs=$((successful_runs + 1))
+                
+                # Create policy subdirectory in temp area and copy logs
+                policy_dir="$temp_spacing_dir/$policy"
+                mkdir -p "$policy_dir"
+                cp logs/*.csv "$policy_dir/" 2>/dev/null || true
+                echo "   📦 Staged logs for $policy policy"
             else
                 echo "   ⚠️  No log files generated"
             fi
@@ -95,6 +101,20 @@ for spacing in "${SPACING_STRATEGIES[@]}"; do
             echo "   ❌ Failed! (${duration}s)"
         fi
     done
+    
+    # Create simulation_logs.zip for this spacing strategy
+    if [ -d "$temp_spacing_dir" ] && [ "$(ls -A "$temp_spacing_dir" 2>/dev/null)" ]; then
+        echo ""
+        echo "📦 Creating simulation_logs.zip for $spacing strategy..."
+        (cd "$temp_spacing_dir" && zip -r "../$OUTPUT_DIR/$spacing/simulation_logs.zip" . > /dev/null 2>&1)
+        
+        # Count policies with data
+        policy_count=$(ls -1 "$temp_spacing_dir" 2>/dev/null | wc -l | tr -d ' ')
+        echo "   ✅ Archived $policy_count policies to simulation_logs.zip"
+        
+        # Clean up temp directory
+        rm -rf "$temp_spacing_dir"
+    fi
 done
 
 echo ""
@@ -107,121 +127,76 @@ if [ $successful_runs -eq 0 ]; then
     exit 1
 fi
 
-# Step 3: Activate virtual environment for analysis
+# Clean up working logs directory
 echo ""
-echo "🔬 STEP 3: Running Analysis For Each Spacing Strategy"
-echo "============================================================"
-echo "Activating virtual environment..."
-source "$VENV_PATH/bin/activate"
+echo "🧹 Cleaning up working logs..."
+rm -rf logs
 
-analysis_success=0
-analysis_total=0
-
-for spacing in "${SPACING_STRATEGIES[@]}"; do
-    spacing_dir="$OUTPUT_DIR/$spacing"
-    
-    echo ""
-    echo "📊 Analyzing $spacing strategy..."
-    echo "------------------------------------------------------------"
-    
-    # Create temporary logs structure expected by analysis scripts
-    temp_logs_dir="logs_temp"
-    rm -rf "$temp_logs_dir"
-    mkdir -p "$temp_logs_dir"
-    
-    # Copy logs to expected structure
-    policies_found=0
-    for policy in "${POLICIES[@]}"; do
-        source_logs="logs/${spacing}_${policy}"
-        target_logs="$temp_logs_dir/$policy"
-        
-        if [ -d "$source_logs" ] && [ "$(ls -A "$source_logs" 2>/dev/null)" ]; then
-            cp -r "$source_logs" "$target_logs"
-            policies_found=$((policies_found + 1))
-            echo "   📁 Copied logs for $policy policy"
-        else
-            echo "   ⚠️  No logs found for $policy policy"
-        fi
-    done
-    
-    if [ $policies_found -eq 0 ]; then
-        echo "   ❌ No logs found for $spacing strategy - skipping analysis"
-        continue
-    fi
-    
-    # Temporarily move current logs and replace with spacing-specific logs
-    if [ -d "logs" ]; then
-        mv "logs" "logs_backup"
-    fi
-    mv "$temp_logs_dir" "logs"
-    
-    # Run analysis
-    analysis_total=$((analysis_total + 1))
-    start_time=$(date +%s)
-    
-    if python3 run_combined_analysis.py > /dev/null 2>&1; then
-        end_time=$(date +%s)
-        duration=$((end_time - start_time))
-        echo "   ✅ Analysis completed successfully! (${duration}s)"
-        
-        # Find the most recent analysis folder and move contents
-        latest_analysis=$(ls -td constellation_analysis_* 2>/dev/null | grep -v "$OUTPUT_DIR" | head -1)
-        if [ -n "$latest_analysis" ]; then
-            # Move PNG files to spacing directory
-            for png_file in "$latest_analysis"/*.png; do
-                if [ -f "$png_file" ]; then
-                    cp "$png_file" "$spacing_dir/"
-                    echo "   📊 Copied $(basename "$png_file")"
-                fi
-            done
-            
-            # Create log archive for this spacing strategy
-            if [ -d "logs" ]; then
-                zip_file="$spacing_dir/simulation_logs.zip"
-                (cd logs && zip -r "../$zip_file" . > /dev/null 2>&1)
-                echo "   📦 Created simulation_logs.zip"
-            fi
-            
-            # Clean up temporary analysis folder
-            rm -rf "$latest_analysis"
-        fi
-        
-        analysis_success=$((analysis_success + 1))
-    else
-        echo "   ❌ Analysis failed!"
-    fi
-    
-    # Restore original logs
-    rm -rf "logs"
-    if [ -d "logs_backup" ]; then
-        mv "logs_backup" "logs"
-    fi
-done
-
-# Step 4: Generate cross-spacing comparison (if available)
+# Clean up working logs directory
 echo ""
-echo "📈 STEP 4: Generating Cross-Strategy Comparison"
-echo "============================================================"
+echo "🧹 Cleaning up working logs..."
+rm -rf logs
 
-if [ -f "generate_spacing_comparison.py" ]; then
-    echo "Running spacing strategy comparison analysis..."
-    if python3 generate_spacing_comparison.py "$OUTPUT_DIR" > /dev/null 2>&1; then
-        echo "✅ Spacing comparison charts generated!"
-    else
-        echo "⚠️  Spacing comparison analysis failed"
-    fi
-else
-    echo "ℹ️  No spacing comparison script found - skipping cross-analysis"
+# Generate simple simulation summary
+echo ""
+echo "📄 Generating simulation summary..."
+SUMMARY_FILE="$OUTPUT_DIR/simulation_summary.txt"
+
+# Read configuration details
+SENSOR_CONFIG="configuration/sensor.dat"
+CONSTELLATION_CONFIG="configuration/constellation.dat"
+
+# Extract sensor parameters
+if [ -f "$SENSOR_CONFIG" ]; then
+    SENSOR_LINE=$(grep -v "^bits-per-sense" "$SENSOR_CONFIG" | head -1)
+    IFS=',' read -ra SENSOR_PARAMS <<< "$SENSOR_LINE"
+    FRAME_RATE="${SENSOR_PARAMS[0]}"
+    IMAGE_WIDTH="${SENSOR_PARAMS[1]}"
+    IMAGE_HEIGHT="${SENSOR_PARAMS[2]}"
+    BITS_PER_PIXEL="${SENSOR_PARAMS[3]}"
+    BUFFER_CAP="${SENSOR_PARAMS[4]}"
+    
+    # Calculate image size
+    IMAGE_SIZE_BITS=$((IMAGE_WIDTH * IMAGE_HEIGHT * BITS_PER_PIXEL))
+    IMAGE_SIZE_MB=$(echo "scale=2; $IMAGE_SIZE_BITS / 8 / 1024 / 1024" | bc -l)
 fi
+
+# Extract constellation parameters
+if [ -f "$CONSTELLATION_CONFIG" ]; then
+    CONSTELLATION_LINE=$(grep -v "^count" "$CONSTELLATION_CONFIG" | head -1)
+    IFS=',' read -ra CONSTELLATION_PARAMS <<< "$CONSTELLATION_LINE"
+    SAT_COUNT="${CONSTELLATION_PARAMS[0]}"
+fi
+
+# Create simple summary
+cat > "$SUMMARY_FILE" << EOF
+Simulation Summary - $(date '+%Y-%m-%d %H:%M:%S')
+
+1) Max Buffer: ${BUFFER_CAP} MB
+2) Picture Size: ${IMAGE_SIZE_MB} MB (${IMAGE_WIDTH}x${IMAGE_HEIGHT}, ${BITS_PER_PIXEL} bits/pixel)
+3) Frame Rate: ${FRAME_RATE} seconds per image
+4) Sim Steps: 1 second = 1 simulation step
+5) Satellite Count: ${SAT_COUNT} satellites
+
+Spacing Strategies:
+- close-spaced: Tightly clustered satellites
+- close-orbit-spaced: Hybrid clustering approach
+- frame-spaced: Frame timing synchronized spacing  
+- orbit-spaced: Evenly distributed across orbit
+
+Link Policies: sticky, fifo, roundrobin, random
+Total Combinations: 16 (4 strategies × 4 policies)
+EOF
+
+echo "   ✅ Created simulation_summary.txt"
 
 # Final summary
 echo ""
 echo "============================================================"
-echo "COMPLETE 4×4 ANALYSIS PIPELINE FINISHED!"
+echo "COMPLETE 4×4 SIMULATION PIPELINE FINISHED!"
 echo "============================================================"
 echo "📁 Output directory: $OUTPUT_DIR"
 echo "✅ Simulations: $successful_runs/$total_runs successful"
-echo "✅ Analyses: $analysis_success/$analysis_total spacing strategies"
 echo ""
 
 # Show final structure
@@ -229,12 +204,13 @@ echo "📋 Generated Structure:"
 for spacing in "${SPACING_STRATEGIES[@]}"; do
     spacing_dir="$OUTPUT_DIR/$spacing"
     if [ -d "$spacing_dir" ]; then
-        file_count=$(ls -1 "$spacing_dir" 2>/dev/null | wc -l | tr -d ' ')
-        echo "   📁 $spacing/ ($file_count files)"
-        if [ -f "$spacing_dir/buffer_comparison.png" ]; then
-            echo "      ✅ Analysis charts generated"
+        zip_exists="❌"
+        if [ -f "$spacing_dir/simulation_logs.zip" ]; then
+            zip_exists="✅"
+            zip_size=$(ls -lh "$spacing_dir/simulation_logs.zip" 2>/dev/null | awk '{print $5}')
+            echo "   📁 $spacing/ → simulation_logs.zip ($zip_size)"
         else
-            echo "      ❌ Analysis charts missing"
+            echo "   📁 $spacing/ → simulation_logs.zip (missing)"
         fi
     fi
 done
@@ -242,10 +218,9 @@ done
 echo ""
 echo "🎯 Configuration Summary:"
 echo "  Buffer Cap: ${BUFFER_MB} MB"
-echo "  Image Size: ~29 MB"
 echo "  Satellites: 50"
 echo "  Total Combinations: $((${#SPACING_STRATEGIES[@]} * ${#POLICIES[@]}))"
 echo ""
-echo "💡 Complete 4×4 spacing strategy and link policy analysis ready in: $OUTPUT_DIR"
-echo "📊 Each spacing strategy contains analysis for all ${#POLICIES[@]} link policies"
-echo "📦 Full simulation logs archived per spacing strategy"
+echo "💡 4×4 simulation data ready in: $OUTPUT_DIR"
+echo "� Each spacing strategy contains simulation_logs.zip with all policy data"
+echo "� Run individual analysis scripts as needed against the simulation data"

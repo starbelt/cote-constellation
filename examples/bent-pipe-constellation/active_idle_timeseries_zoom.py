@@ -302,10 +302,9 @@ def test_single_strategy(strategy="close-spaced", policy="sticky", start_time_st
             # Single column vertical legend positioned to the right
             ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=8, ncol=1)
         
-        # Save test chart with descriptive filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = SCRIPT_DIR / f"test_chart_{timestamp}"
-        output_dir.mkdir(exist_ok=True)
+        # Save test chart to constellation analysis folder
+        constellation_folder = find_latest_constellation_analysis_folder(SCRIPT_DIR)
+        output_dir = constellation_folder
         
         # Create filename with time range info if custom time was specified
         if start_time_str and duration_seconds:
@@ -316,7 +315,7 @@ def test_single_strategy(strategy="close-spaced", policy="sticky", start_time_st
         else:
             time_suffix = ""
             
-        output_file = output_dir / f"test_{strategy}_{policy}{time_suffix}.png"
+        output_file = output_dir / f"active_idle_timeseries_zoom_{strategy}_{policy}{time_suffix}.png"
         plt.savefig(output_file, dpi=150, bbox_inches='tight')
         plt.close()
         

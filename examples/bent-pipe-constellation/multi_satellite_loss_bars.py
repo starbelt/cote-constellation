@@ -225,9 +225,7 @@ def create_loss_bar_chart(output_dir=None):
     if output_dir is None:
         output_dir = find_latest_constellation_analysis_folder()
         if output_dir is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_dir = SCRIPT_DIR / f"analysis_{timestamp}"
-            output_dir.mkdir(exist_ok=True)
+            raise FileNotFoundError("No constellation_analysis folders found. Run simulation first.")
     
     # Set consistent font family for the entire plot
     plt.rcParams['font.family'] = 'DejaVu Sans'
@@ -461,9 +459,7 @@ def create_bar_charts():
     # Use constellation analysis folder for output
     output_dir = find_latest_constellation_analysis_folder()
     if output_dir is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = SCRIPT_DIR / f"loss_bar_analysis_{timestamp}"
-        output_dir.mkdir(exist_ok=True)
+        raise FileNotFoundError("No constellation_analysis folders found. Run simulation first.")
     
     print(f"Output directory: {output_dir.name}")
     

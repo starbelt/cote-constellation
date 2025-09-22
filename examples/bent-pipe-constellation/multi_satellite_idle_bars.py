@@ -145,7 +145,6 @@ def calculate_idle_time_for_policy(policy_dir):
             df['buffer_mb'] = pd.to_numeric(df['buffer_mb'], errors='coerce')
             
             # Count periods where buffer <= 0.001 (essentially empty)
-            # This follows the reference threshold from communication_pattern_optimized_charts
             idle_mask = df['buffer_mb'] <= 0.001
             
             # For more accuracy, also check previous buffer state like reference

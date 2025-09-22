@@ -319,7 +319,7 @@ def create_strategy_chart_optimized(strategy, output_dir):
         plt.tight_layout(pad=2.5)  # Increased padding for larger chart
         plt.subplots_adjust(right=0.82, hspace=0.4)  # More space for larger chart and legend
         
-        output_file = output_dir / f"communication_pattern_{strategy.replace('-', '_')}_strategy.png"
+        output_file = output_dir / f"active_idle_timeseries_{strategy.replace('-', '_')}_strategy.png"
         plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white')
         plt.close()
         
@@ -337,10 +337,9 @@ def main():
     print("Creating 4 PNG files (one per spacing strategy)...")
     print()
     
-    # Create output directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = SCRIPT_DIR / f"communication_pattern_analysis_{timestamp}"
-    output_dir.mkdir(exist_ok=True)
+    # Use existing constellation analysis directory
+    output_dir = find_latest_constellation_analysis_folder(SCRIPT_DIR)
+    print(f"Saving charts to: {output_dir.name}")
     
     generated_files = []
     
