@@ -15,23 +15,50 @@ import zipfile
 import tempfile
 import shutil
 import argparse
+import glob
+import sys
 
 # Configuration
 SCRIPT_DIR = Path(__file__).parent.absolute()
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
 
-def find_latest_constellation_analysis_folder(script_dir):
-    """Find the most recent constellation_analysis folder."""
-    constellation_folders = [d for d in script_dir.iterdir() 
-                           if d.is_dir() and d.name.startswith('constellation_analysis_')]
+def extract_constellation_data(folder_path=None):
+    """Extract data from constellation_analysis folders"""
     
-    if not constellation_folders:
-        raise FileNotFoundError("No constellation_analysis folders found")
-    
-    # Sort by folder name (which includes timestamp) to get the latest
-    latest_folder = sorted(constellation_folders, key=lambda x: x.name)[-1]
-    print(f"  Using constellation analysis folder: {latest_folder.name}")
-    return latest_folder
+    if folder_path:
+        # User specified a folder
+        folder = Path(folder_path)
+        
+        # Handle relative paths from current directory
+        if not folder.is_absolute():
+            folder = SCRIPT_DIR / folder
+        
+        # Validate folder exists and follows naming convention
+        if not folder.exists():
+            print(f"❌ Error: Specified folder '{folder_path}' does not exist!")
+            return None
+        
+        if not folder.is_dir():
+            print(f"❌ Error: '{folder_path}' is not a directory!")
+            return None
+        
+        if not folder.name.startswith('constellation_analysis_'):
+            print(f"⚠️  Warning: Folder '{folder.name}' does not follow expected naming convention (constellation_analysis_YYYYMMDD_HHMMSS)")
+        
+        print(f"📁 Using specified constellation analysis folder: {folder.name}")
+        return folder
+    else:
+        # Find latest folder (existing behavior)
+        constellation_folders = [d for d in SCRIPT_DIR.iterdir() 
+                               if d.is_dir() and d.name.startswith('constellation_analysis_')]
+        
+        if not constellation_folders:
+            raise FileNotFoundError("No constellation_analysis folders found")
+        
+        # Sort by folder name (which includes timestamp) to get the latest
+        latest_folder = sorted(constellation_folders, key=lambda x: x.name)[-1]
+        print(f"📁 Using latest constellation analysis folder: {latest_folder.name}")
+        return latest_folder
 
 def extract_archive_data(strategy, archive_base_path):
     """Extract simulation data from zip archive for the given strategy."""
@@ -169,12 +196,17 @@ def parse_communication_data_simple(strategy, policy, temp_dir, start_time_str=N
     
     return df[['hours', 'ground_station_active']], satellite_data, start_time
 
-def test_single_strategy(strategy="close-spaced", policy="sticky", start_time_str=None, duration_seconds=None):
+def test_single_strategy(strategy="close-spaced", policy="sticky", start_time_str=None, duration_seconds=None, constellation_folder=None):
     """Test processing a single strategy with optional parameters."""
     print(f"Testing {strategy} strategy...")
     
-    # Use the latest constellation analysis directory
-    archive_base_path = find_latest_constellation_analysis_folder(SCRIPT_DIR)
+    # Use the provided constellation analysis directory or find latest
+    if constellation_folder is None:
+        archive_base_path = extract_constellation_data()
+        if not archive_base_path:
+            return None
+    else:
+        archive_base_path = constellation_folder
     
     # Extract archive data
     temp_dir = extract_archive_data(strategy, archive_base_path)
@@ -271,7 +303,7 @@ def test_single_strategy(strategy="close-spaced", policy="sticky", start_time_st
                 ax.plot(sat_data['hours'], y_line, 
                        color=sat_color, linewidth=2, label=f'Sat {sat_id}', alpha=0.8)
         
-        ax.set_title(f'Test: {strategy} - {policy} (All Active Satellites with Buffer States)', fontsize=14, fontweight='bold')
+        ax.set_title(f'{strategy} - {policy}', fontsize=14, fontweight='bold')
         ax.set_ylabel('Activity')
         ax.grid(True, alpha=0.3)
         
@@ -303,8 +335,7 @@ def test_single_strategy(strategy="close-spaced", policy="sticky", start_time_st
             ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=8, ncol=1)
         
         # Save test chart to constellation analysis folder
-        constellation_folder = find_latest_constellation_analysis_folder(SCRIPT_DIR)
-        output_dir = constellation_folder
+        output_dir = archive_base_path
         
         # Create filename with time range info if custom time was specified
         if start_time_str and duration_seconds:
@@ -331,6 +362,8 @@ def test_single_strategy(strategy="close-spaced", policy="sticky", start_time_st
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Generate satellite communication charts from archived data')
+    parser.add_argument('folder', nargs='?', default=None, 
+                       help='Constellation analysis folder to process (optional, defaults to latest)')
     parser.add_argument('strategy', nargs='?', default='close-spaced',
                        help='Strategy to analyze (default: close-spaced)')
     parser.add_argument('policy', nargs='?', default='sticky',
@@ -345,10 +378,15 @@ def parse_arguments():
 def main():
     args = parse_arguments()
     
+    # Extract constellation analysis data
+    constellation_folder = extract_constellation_data(args.folder)
+    if not constellation_folder:
+        return
+    
     print("Testing single strategy chart generation...")
     print(f"Parameters: strategy={args.strategy}, policy={args.policy}, start_time={args.start_time}, duration={args.duration}")
     
-    test_single_strategy(args.strategy, args.policy, args.start_time, args.duration)
+    test_single_strategy(args.strategy, args.policy, args.start_time, args.duration, constellation_folder)
 
 if __name__ == "__main__":
     main()

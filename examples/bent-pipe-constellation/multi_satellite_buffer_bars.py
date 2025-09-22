@@ -15,6 +15,10 @@ from pathlib import Path
 from datetime import datetime
 import zipfile
 import glob
+import argparse
+import sys
+import zipfile
+import glob
 import os
 import tempfile
 import shutil
@@ -24,21 +28,45 @@ SCRIPT_DIR = Path(__file__).parent.absolute()
 SPACING_STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
 
-def find_latest_constellation_analysis_folder():
-    """Find the most recent constellation_analysis_* folder"""
-    # Look in the current directory first (bent-pipe-constellation folder)
-    constellation_folders = [d for d in SCRIPT_DIR.iterdir() 
-                           if d.is_dir() and d.name.startswith('constellation_analysis_')]
+def extract_constellation_data(folder_path=None):
+    """Extract data from constellation_analysis folders"""
     
-    if not constellation_folders:
-        print("No constellation_analysis_* folders found!")
-        print(f"Searched in: {SCRIPT_DIR}")
-        return None
-    
-    # Sort by folder name (which includes timestamp) to get the latest
-    latest_folder = sorted(constellation_folders, key=lambda x: x.name)[-1]
-    print(f"Using latest analysis folder: {latest_folder.name}")
-    return latest_folder
+    if folder_path:
+        # User specified a folder
+        folder = Path(folder_path)
+        
+        # Handle relative paths from current directory
+        if not folder.is_absolute():
+            folder = SCRIPT_DIR / folder
+        
+        # Validate folder exists and follows naming convention
+        if not folder.exists():
+            print(f"❌ Error: Specified folder '{folder_path}' does not exist!")
+            return None
+        
+        if not folder.is_dir():
+            print(f"❌ Error: '{folder_path}' is not a directory!")
+            return None
+        
+        if not folder.name.startswith('constellation_analysis_'):
+            print(f"⚠️  Warning: Folder '{folder.name}' does not follow expected naming convention (constellation_analysis_YYYYMMDD_HHMMSS)")
+        
+        print(f"📁 Using specified constellation analysis folder: {folder.name}")
+        return folder
+    else:
+        # Find latest folder (existing behavior)
+        constellation_folders = [d for d in SCRIPT_DIR.iterdir() 
+                               if d.is_dir() and d.name.startswith('constellation_analysis_')]
+        
+        if not constellation_folders:
+            print("No constellation_analysis_* folders found!")
+            print(f"Searched in: {SCRIPT_DIR}")
+            return None
+        
+        # Sort by folder name (which includes timestamp) to get the latest
+        latest_folder = sorted(constellation_folders, key=lambda x: x.name)[-1]
+        print(f"📁 Using latest constellation analysis folder: {latest_folder.name}")
+        return latest_folder
 
 def read_config():
     """Read simulation configuration"""
@@ -183,7 +211,7 @@ def create_bar_chart_for_strategy(strategy, buffer_results, config, output_dir):
     strategy_display = strategy.replace('-', ' ').title()
     ax.set_ylabel('Total Data Downloaded (MB)', fontweight='bold', fontsize=12)
     ax.set_xlabel('Scheduling Policy', fontweight='bold', fontsize=12)
-    ax.set_title(f'Total Data Downloaded by Policy - {strategy_display} Strategy\n(Constellation Performance Comparison)', 
+    ax.set_title(f'Total Data Downloaded by Policy - {strategy_display} Strategy', 
                 fontweight='bold', fontsize=14, pad=20)
     
     # Add value labels on bars
@@ -228,18 +256,18 @@ def create_bar_chart_for_strategy(strategy, buffer_results, config, output_dir):
         if ranking:
             print(f"  {strategy_display} strategy ranking: {ranking}")
 
-def create_bar_charts():
+def create_bar_charts(folder_path=None):
     """Create bar charts for all strategies"""
     print("Multi-Satellite Buffer Distribution Bar Chart Analysis")
     
-    constellation_folder = find_latest_constellation_analysis_folder()
+    constellation_folder = extract_constellation_data(folder_path)
     if not constellation_folder:
         return
     
     config = read_config()
     
-    # Use the latest constellation analysis folder (same as generate_spacing_comparison.py)
-    output_dir = find_latest_constellation_analysis_folder()
+    # Use the same constellation analysis folder for output
+    output_dir = constellation_folder
     
     print(f"Output directory: {output_dir.name}")
     
@@ -258,7 +286,13 @@ def create_bar_charts():
 
 def main():
     """Main function to run analysis"""
-    create_bar_charts()
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Generate multi-satellite buffer distribution bar charts')
+    parser.add_argument('folder', nargs='?', default=None, 
+                       help='Constellation analysis folder to process (optional, defaults to latest)')
+    args = parser.parse_args()
+    
+    create_bar_charts(args.folder)
 
 if __name__ == "__main__":
     main()

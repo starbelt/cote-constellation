@@ -16,24 +16,51 @@ import zipfile
 import os
 from pathlib import Path
 from datetime import datetime
+import argparse
+import sys
 
 # Configuration
 SCRIPT_DIR = Path(__file__).parent.absolute()
 SPACING_STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
 
-def find_latest_constellation_analysis_folder():
-    """Find the most recent constellation_analysis folder."""
-    constellation_folders = [d for d in SCRIPT_DIR.iterdir() 
-                           if d.is_dir() and d.name.startswith('constellation_analysis_')]
+def extract_constellation_data(folder_path=None):
+    """Extract data from constellation_analysis folders"""
     
-    if not constellation_folders:
-        raise FileNotFoundError("No constellation_analysis folders found")
-    
-    # Sort by folder name (which includes timestamp) to get the latest
-    latest_folder = sorted(constellation_folders, key=lambda x: x.name)[-1]
-    print(f"Using constellation analysis folder: {latest_folder.name}")
-    return latest_folder
+    if folder_path:
+        # User specified a folder
+        folder = Path(folder_path)
+        
+        # Handle relative paths from current directory
+        if not folder.is_absolute():
+            folder = SCRIPT_DIR / folder
+        
+        # Validate folder exists and follows naming convention
+        if not folder.exists():
+            print(f"❌ Error: Specified folder '{folder_path}' does not exist!")
+            return None
+        
+        if not folder.is_dir():
+            print(f"❌ Error: '{folder_path}' is not a directory!")
+            return None
+        
+        if not folder.name.startswith('constellation_analysis_'):
+            print(f"⚠️  Warning: Folder '{folder.name}' does not follow expected naming convention (constellation_analysis_YYYYMMDD_HHMMSS)")
+        
+        print(f"📁 Using specified constellation analysis folder: {folder.name}")
+        return folder
+    else:
+        # Find latest folder (existing behavior)
+        constellation_folders = [d for d in SCRIPT_DIR.iterdir() 
+                               if d.is_dir() and d.name.startswith('constellation_analysis_')]
+        
+        if not constellation_folders:
+            raise FileNotFoundError("No constellation_analysis folders found")
+        
+        # Sort by folder name (which includes timestamp) to get the latest
+        latest_folder = sorted(constellation_folders, key=lambda x: x.name)[-1]
+        print(f"📁 Using latest constellation analysis folder: {latest_folder.name}")
+        return latest_folder
 
 def extract_metrics_from_logs(spacing_dir):
     """Extract comprehensive metrics from simulation logs (optimized)"""
@@ -253,8 +280,16 @@ def generate_matrix_comparison(master_dir, metric_name, title, filename):
 def main():
     """Generate all three matrix comparisons automatically"""
     try:
-        # Find the latest constellation analysis folder
-        master_dir = find_latest_constellation_analysis_folder()
+        # Parse command line arguments
+        parser = argparse.ArgumentParser(description='Generate spacing strategy comparison matrices')
+        parser.add_argument('folder', nargs='?', default=None, 
+                           help='Constellation analysis folder to process (optional, defaults to latest)')
+        args = parser.parse_args()
+        
+        # Find the constellation analysis folder
+        master_dir = extract_constellation_data(args.folder)
+        if not master_dir:
+            return
         
         print("Generating spacing strategy comparison matrices...")
         

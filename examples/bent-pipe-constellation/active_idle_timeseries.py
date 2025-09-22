@@ -13,24 +13,52 @@ import seaborn as sns
 import zipfile
 import tempfile
 import shutil
+import glob
+import argparse
+import sys
 
 # Configuration
 SCRIPT_DIR = Path(__file__).parent.absolute()
 SPACING_STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
 
-def find_latest_constellation_analysis_folder(script_dir):
-    """Find the most recent constellation_analysis folder."""
-    constellation_folders = [d for d in script_dir.iterdir() 
-                           if d.is_dir() and d.name.startswith('constellation_analysis_')]
+def extract_constellation_data(folder_path=None):
+    """Extract data from constellation_analysis folders"""
     
-    if not constellation_folders:
-        raise FileNotFoundError("No constellation_analysis folders found")
-    
-    # Sort by folder name (which includes timestamp) to get the latest
-    latest_folder = sorted(constellation_folders, key=lambda x: x.name)[-1]
-    print(f"  Using constellation analysis folder: {latest_folder.name}")
-    return latest_folder
+    if folder_path:
+        # User specified a folder
+        folder = Path(folder_path)
+        
+        # Handle relative paths from current directory
+        if not folder.is_absolute():
+            folder = SCRIPT_DIR / folder
+        
+        # Validate folder exists and follows naming convention
+        if not folder.exists():
+            print(f"❌ Error: Specified folder '{folder_path}' does not exist!")
+            return None
+        
+        if not folder.is_dir():
+            print(f"❌ Error: '{folder_path}' is not a directory!")
+            return None
+        
+        if not folder.name.startswith('constellation_analysis_'):
+            print(f"⚠️  Warning: Folder '{folder.name}' does not follow expected naming convention (constellation_analysis_YYYYMMDD_HHMMSS)")
+        
+        print(f"📁 Using specified constellation analysis folder: {folder.name}")
+        return folder
+    else:
+        # Find latest folder (existing behavior)
+        constellation_folders = [d for d in SCRIPT_DIR.iterdir() 
+                               if d.is_dir() and d.name.startswith('constellation_analysis_')]
+        
+        if not constellation_folders:
+            raise FileNotFoundError("No constellation_analysis folders found")
+        
+        # Sort by folder name (which includes timestamp) to get the latest
+        latest_folder = sorted(constellation_folders, key=lambda x: x.name)[-1]
+        print(f"📁 Using latest constellation analysis folder: {latest_folder.name}")
+        return latest_folder
 
 def extract_archive_data(strategy, archive_base_path):
     """Extract simulation data from zip archive for the given strategy."""
@@ -183,7 +211,7 @@ def parse_communication_data_optimized(strategy, policy, temp_dir):
     
     return df[['hours', 'ground_station_active']], satellite_data
 
-def create_strategy_chart_optimized(strategy, output_dir):
+def create_strategy_chart_optimized(strategy, output_dir, archive_base_path=None):
     """Create a single strategy chart with 4 policies (optimized)."""
     
     plt.style.use('default')
@@ -216,8 +244,11 @@ def create_strategy_chart_optimized(strategy, output_dir):
         'satellites': base_colors * 2  # Ensure we have enough colors for 50+ satellites
     }
     
-    # Extract archive data once for this strategy - automatically find latest folder
-    archive_base_path = find_latest_constellation_analysis_folder(SCRIPT_DIR)
+    # Extract archive data once for this strategy - use provided path or find latest folder
+    if archive_base_path is None:
+        archive_base_path = extract_constellation_data()
+        if not archive_base_path:
+            return None
     temp_dir = extract_archive_data(strategy, archive_base_path)
     if temp_dir is None:
         return None
@@ -337,15 +368,23 @@ def main():
     print("Creating 4 PNG files (one per spacing strategy)...")
     print()
     
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Generate active/idle timeseries charts')
+    parser.add_argument('folder', nargs='?', default=None, 
+                       help='Constellation analysis folder to process (optional, defaults to latest)')
+    args = parser.parse_args()
+    
     # Use existing constellation analysis directory
-    output_dir = find_latest_constellation_analysis_folder(SCRIPT_DIR)
+    output_dir = extract_constellation_data(args.folder)
+    if not output_dir:
+        return
     print(f"Saving charts to: {output_dir.name}")
     
     generated_files = []
     
     for strategy in SPACING_STRATEGIES:
         print(f"Processing {strategy} strategy...")
-        output_file = create_strategy_chart_optimized(strategy, output_dir)
+        output_file = create_strategy_chart_optimized(strategy, output_dir, output_dir)
         if output_file:
             generated_files.append(output_file)
         print()

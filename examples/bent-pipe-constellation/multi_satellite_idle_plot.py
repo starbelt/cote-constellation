@@ -13,6 +13,8 @@ from pathlib import Path
 from datetime import datetime
 import zipfile
 import glob
+import argparse
+import sys
 
 # Configuration - use absolute paths
 SCRIPT_DIR = Path(__file__).parent.absolute()
@@ -21,26 +23,47 @@ POLICIES = ["sticky", "fifo", "roundrobin", "random"]
 STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 TOP_N = 15
 
-def extract_constellation_data():
-    """Extract data from constellation_analysis folders"""
-    constellation_folders = []
-    
-    # Look for constellation_analysis folders in the current directory
-    pattern = str(SCRIPT_DIR / "constellation_analysis_*")
-    for folder_path in glob.glob(pattern):
-        folder = Path(folder_path)
-        if folder.is_dir():
-            constellation_folders.append(folder)
-    
-    if not constellation_folders:
-        print("No constellation_analysis folders found!")
-        return None
-    
-    # Use the most recent constellation analysis folder
-    latest_folder = max(constellation_folders, key=lambda x: x.stat().st_mtime)
-    print(f"Using constellation analysis folder: {latest_folder.name}")
-    
-    return latest_folder
+def extract_constellation_data(folder_path=None):
+    """Extract data from specified or latest constellation_analysis folder"""
+    if folder_path:
+        # Use specified folder
+        if isinstance(folder_path, str):
+            folder_path = Path(folder_path)
+        
+        # Handle both absolute and relative paths
+        if not folder_path.is_absolute():
+            folder_path = SCRIPT_DIR / folder_path
+            
+        if not folder_path.exists():
+            print(f"❌ Specified folder not found: {folder_path}")
+            return None
+            
+        if not folder_path.name.startswith('constellation_analysis_'):
+            print(f"❌ Folder doesn't appear to be a constellation analysis folder: {folder_path}")
+            return None
+            
+        print(f"📁 Using specified constellation analysis folder: {folder_path.name}")
+        return folder_path
+    else:
+        # Find latest folder (existing behavior)
+        constellation_folders = []
+        
+        # Look for constellation_analysis folders in the current directory
+        pattern = str(SCRIPT_DIR / "constellation_analysis_*")
+        for folder_path in glob.glob(pattern):
+            folder = Path(folder_path)
+            if folder.is_dir():
+                constellation_folders.append(folder)
+        
+        if not constellation_folders:
+            print("No constellation_analysis folders found!")
+            return None
+        
+        # Use the most recent constellation analysis folder
+        latest_folder = max(constellation_folders, key=lambda x: x.stat().st_mtime)
+        print(f"📁 Using latest constellation analysis folder: {latest_folder.name}")
+        
+        return latest_folder
 
 def read_config():
     """Read simulation configuration"""
@@ -353,8 +376,14 @@ def main():
     """Main execution function"""
     print("=== Multi-Satellite Downlink Idle Time Analysis ===")
     
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Generate multi-satellite idle time plots')
+    parser.add_argument('folder', nargs='?', default=None, 
+                       help='Constellation analysis folder to process (optional, defaults to latest)')
+    args = parser.parse_args()
+    
     # Extract constellation analysis data
-    constellation_analysis_folder = extract_constellation_data()
+    constellation_analysis_folder = extract_constellation_data(args.folder)
     if not constellation_analysis_folder:
         print("No constellation analysis data found!")
         print("Please run constellation analysis first.")

@@ -17,6 +17,7 @@ p3-env/
 #results
 *.png
 *.zip
+simulation_summary.txt
 
 # Executables
 bent_pipe

@@ -1,4 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bimport pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+from datetime import datetime
+import zipfile
+import tempfile
+import glob
+import argparse
+import sys
 """
 Multi-Satellite Data Loss Bar Chart Analysis
 
@@ -55,25 +64,49 @@ def read_config():
     
     return config
 
-def find_latest_constellation_analysis_folder():
-    """Find the most recent constellation_analysis_* folder"""
-    # Look for constellation_analysis_* folders in parent directories
-    current_dir = SCRIPT_DIR
+def extract_constellation_data(folder_path=None):
+    """Extract data from constellation_analysis folders"""
     
-    while current_dir != current_dir.parent:
-        constellation_folders = [f for f in current_dir.iterdir() 
-                               if f.is_dir() and f.name.startswith('constellation_analysis_')]
+    if folder_path:
+        # User specified a folder
+        folder = Path(folder_path)
         
-        if constellation_folders:
-            # Sort by modification time (newest first)
-            latest_folder = max(constellation_folders, key=lambda x: x.stat().st_mtime)
-            print(f"Using latest analysis folder: {latest_folder.name}")
-            return latest_folder
+        # Handle relative paths from current directory
+        if not folder.is_absolute():
+            folder = SCRIPT_DIR / folder
         
-        current_dir = current_dir.parent
-    
-    print("No constellation_analysis_* folder found!")
-    return None
+        # Validate folder exists and follows naming convention
+        if not folder.exists():
+            print(f"❌ Error: Specified folder '{folder_path}' does not exist!")
+            return None
+        
+        if not folder.is_dir():
+            print(f"❌ Error: '{folder_path}' is not a directory!")
+            return None
+        
+        if not folder.name.startswith('constellation_analysis_'):
+            print(f"⚠️  Warning: Folder '{folder.name}' does not follow expected naming convention (constellation_analysis_YYYYMMDD_HHMMSS)")
+        
+        print(f"📁 Using specified constellation analysis folder: {folder.name}")
+        return folder
+    else:
+        # Find latest folder (existing behavior)
+        current_dir = SCRIPT_DIR
+        
+        while current_dir != current_dir.parent:
+            constellation_folders = [f for f in current_dir.iterdir() 
+                                   if f.is_dir() and f.name.startswith('constellation_analysis_')]
+            
+            if constellation_folders:
+                # Sort by modification time (newest first)
+                latest_folder = max(constellation_folders, key=lambda x: x.stat().st_mtime)
+                print(f"📁 Using latest constellation analysis folder: {latest_folder.name}")
+                return latest_folder
+            
+            current_dir = current_dir.parent
+        
+        print("No constellation_analysis_* folder found!")
+        return None
 
 def get_loss_data_for_strategy(strategy, constellation_folder):
     """Extract loss data for a specific strategy from constellation analysis folder"""
@@ -223,7 +256,7 @@ def create_loss_bar_chart(output_dir=None):
     
     # Save plot - use provided output directory or find constellation analysis folder
     if output_dir is None:
-        output_dir = find_latest_constellation_analysis_folder()
+        output_dir = extract_constellation_data()
         if output_dir is None:
             raise FileNotFoundError("No constellation_analysis folders found. Run simulation first.")
     
@@ -386,7 +419,7 @@ def create_bar_chart_for_strategy(strategy, loss_results, config, output_dir):
     strategy_display = strategy.replace('-', ' ').title()
     ax.set_ylabel('Total Data Loss (MB)', fontweight='bold', fontsize=12)
     ax.set_xlabel('Scheduling Policy', fontweight='bold', fontsize=12)
-    ax.set_title(f'Total Data Loss by Policy - {strategy_display} Strategy\n(Constellation Performance Comparison)', 
+    ax.set_title(f'Total Data Loss by Policy - {strategy_display} Strategy', 
                 fontweight='bold', fontsize=14, pad=20)
     
     # Add value labels on bars
@@ -399,7 +432,7 @@ def create_bar_chart_for_strategy(strategy, loss_results, config, output_dir):
                     ha='center', va='bottom', fontweight='bold', fontsize=10, color='black')
     elif all(t == 0 for t in totals):
         # Special case when no loss occurred
-        ax.text(0.5, 0.5, 'No Data Loss Detected\n(Excellent Buffer Management!)', 
+        ax.text(0.5, 0.5, 'No Data Loss Detected', 
                 transform=ax.transAxes, ha='center', va='center',
                 fontsize=16, fontweight='bold', color='green',
                 bbox=dict(boxstyle="round,pad=0.3", facecolor='lightgreen', alpha=0.7))
@@ -446,21 +479,18 @@ def create_bar_chart_for_strategy(strategy, loss_results, config, output_dir):
     else:
         print(f"  {strategy_display}: No data loss detected!")
 
-def create_bar_charts():
+def create_bar_charts(folder_path=None):
     """Create bar charts for all strategies"""
     print("Multi-Satellite Data Loss Bar Chart Analysis")
     
-    constellation_folder = find_latest_constellation_analysis_folder()
+    constellation_folder = extract_constellation_data(folder_path)
     if not constellation_folder:
         return
     
     config = read_config()
     
     # Use constellation analysis folder for output
-    output_dir = find_latest_constellation_analysis_folder()
-    if output_dir is None:
-        raise FileNotFoundError("No constellation_analysis folders found. Run simulation first.")
-    
+    output_dir = constellation_folder
     print(f"Output directory: {output_dir.name}")
     
     # Process each strategy
@@ -478,7 +508,13 @@ def create_bar_charts():
 
 def main():
     """Main function to run analysis"""
-    create_bar_charts()
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Generate multi-satellite data loss bar charts')
+    parser.add_argument('folder', nargs='?', default=None, 
+                       help='Constellation analysis folder to process (optional, defaults to latest)')
+    args = parser.parse_args()
+    
+    create_bar_charts(args.folder)
 
 if __name__ == "__main__":
     main()
