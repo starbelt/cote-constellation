@@ -11,12 +11,35 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
 import zipfile
+import glob
 
 # Configuration - use absolute paths
 SCRIPT_DIR = Path(__file__).parent.absolute()
 LOGS_DIR = SCRIPT_DIR / "logs"
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
+STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 TOP_N = 15
+
+def extract_constellation_data():
+    """Extract data from constellation_analysis folders"""
+    constellation_folders = []
+    
+    # Look for constellation_analysis folders in the current directory
+    pattern = str(SCRIPT_DIR / "constellation_analysis_*")
+    for folder_path in glob.glob(pattern):
+        folder = Path(folder_path)
+        if folder.is_dir():
+            constellation_folders.append(folder)
+    
+    if not constellation_folders:
+        print("No constellation_analysis folders found!")
+        return None
+    
+    # Use the most recent constellation analysis folder
+    latest_folder = max(constellation_folders, key=lambda x: x.stat().st_mtime)
+    print(f"Using constellation analysis folder: {latest_folder.name}")
+    
+    return latest_folder
 
 def read_config():
     """Read simulation configuration"""
@@ -52,51 +75,66 @@ def read_config():
     
     return config
 
-def get_policy_dirs():
-    """Get policy directories"""
+def get_policy_dirs(strategy_folder):
+    """Get policy directories from strategy simulation_logs.zip"""
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
+    
+    if not simulation_logs_zip.exists():
+        return {}
+    
     dirs = {}
-    for policy in POLICIES:
-        policy_dir = LOGS_DIR / policy
-        if policy_dir.exists():
-            dirs[policy] = policy_dir
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        # Check which policies have data in the zip
+        for policy in POLICIES:
+            policy_files = [name for name in zipf.namelist() if name.startswith(f"{policy}/")]
+            if policy_files:
+                dirs[policy] = policy  # Store policy name, we'll extract from zip
+    
     return dirs
 
-def get_top_satellites():
-    """Get satellites with most downlink activity based on ACTUAL buffer changes, not just tx-rx logs"""
-    policy_dirs = get_policy_dirs()
+def get_top_satellites(strategy_folder):
+    """Get satellites with most downlink activity from strategy folder"""
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
+    
+    if not simulation_logs_zip.exists():
+        print(f"No simulation_logs.zip found in {strategy_folder}")
+        return [], {}
+    
+    policy_dirs = get_policy_dirs(strategy_folder)
     all_totals = {}
     
-    for policy, policy_dir in policy_dirs.items():
-        print(f"  Processing {policy} policy...")
-        
-        # Check buffer files for actual data downloaded (buffer decreases)
-        # Skip the inflated throughput calculation that was giving wrong totals
-        for sat_num in range(50):
-            sat_id = f"60518{sat_num:03d}-0"
-            buffer_file = policy_dir / f"meas-MB-buffered-sat-00{sat_id.replace('-0', '')}.csv"
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        for policy in policy_dirs.keys():
+            print(f"  Processing {policy} policy...")
             
-            if buffer_file.exists():
-                try:
-                    buffer_df = pd.read_csv(buffer_file)
-                    if len(buffer_df) > 1:
-                        buffer_col = f"MB-buffered-sat-00{sat_id.replace('-0', '')}"
-                        if buffer_col in buffer_df.columns:
-                            # Calculate total data downloaded by looking at buffer decrease + tx-rx events
-                            buffer_df['prev_value'] = buffer_df[buffer_col].shift(1)
-                            buffer_df['decrease'] = buffer_df['prev_value'] - buffer_df[buffer_col]
-                            
-                            # Sum all buffer decreases (data flowing out) - more accurate than arbitrary threshold
-                            total_downloaded = buffer_df[buffer_df['decrease'] > 0]['decrease'].sum()
-                            
-                            if total_downloaded > 0:
-                                if sat_id not in all_totals:
-                                    all_totals[sat_id] = {}
-                                if policy not in all_totals[sat_id]:
-                                    all_totals[sat_id][policy] = 0
-                                # Use actual buffer decreases as total downloaded
-                                all_totals[sat_id][policy] = total_downloaded
-                except Exception as e:
-                    pass  # Skip files that can't be read
+            # Check buffer files for actual data downloaded (buffer decreases)
+            for sat_num in range(50):
+                sat_id = f"60518{sat_num:03d}-0"
+                buffer_file_path = f"{policy}/meas-MB-buffered-sat-00{sat_id.replace('-0', '')}.csv"
+                
+                if buffer_file_path in zipf.namelist():
+                    try:
+                        with zipf.open(buffer_file_path) as file:
+                            buffer_df = pd.read_csv(file)
+                            if len(buffer_df) > 1:
+                                buffer_col = f"MB-buffered-sat-00{sat_id.replace('-0', '')}"
+                                if buffer_col in buffer_df.columns:
+                                    # Calculate total data downloaded by looking at buffer decrease + tx-rx events
+                                    buffer_df['prev_value'] = buffer_df[buffer_col].shift(1)
+                                    buffer_df['decrease'] = buffer_df['prev_value'] - buffer_df[buffer_col]
+                                    
+                                    # Sum all buffer decreases (data flowing out) - more accurate than arbitrary threshold
+                                    total_downloaded = buffer_df[buffer_df['decrease'] > 0]['decrease'].sum()
+                                    
+                                    if total_downloaded > 0:
+                                        if sat_id not in all_totals:
+                                            all_totals[sat_id] = {}
+                                        if policy not in all_totals[sat_id]:
+                                            all_totals[sat_id][policy] = 0
+                                        # Use actual buffer decreases as total downloaded
+                                        all_totals[sat_id][policy] = total_downloaded
+                    except Exception as e:
+                        pass  # Skip files that can't be read
     
     # Get top satellites by max usage
     sat_max = {sat: max(policies.values()) for sat, policies in all_totals.items()}
@@ -104,105 +142,127 @@ def get_top_satellites():
     
     return [sat for sat, _ in top_sats], all_totals
 
-def get_global_time_reference():
+def get_global_time_reference(strategy_folder):
     """Get global minimum timestamp across all policies for consistent time reference"""
-    policy_dirs = get_policy_dirs()
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
+    
+    if not simulation_logs_zip.exists():
+        return None
+    
+    policy_dirs = get_policy_dirs(strategy_folder)
     min_timestamp = None
     
-    for policy_dir in policy_dirs.values():
-        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-        if not tx_rx_file.exists():
-            continue
-            
-        df = pd.read_csv(tx_rx_file)
-        df = df.iloc[:, :2]
-        df.columns = ["timestamp", "satellite"]
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        
-        file_min = df["timestamp"].min()
-        if min_timestamp is None or file_min < min_timestamp:
-            min_timestamp = file_min
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        for policy in policy_dirs.keys():
+            tx_rx_file_path = f"{policy}/meas-downlink-tx-rx.csv"
+            if tx_rx_file_path not in zipf.namelist():
+                continue
+                
+            with zipf.open(tx_rx_file_path) as file:
+                df = pd.read_csv(file)
+                df = df.iloc[:, :2]
+                df.columns = ["timestamp", "satellite"]
+                df["timestamp"] = pd.to_datetime(df["timestamp"])
+                
+                file_min = df["timestamp"].min()
+                if min_timestamp is None or file_min < min_timestamp:
+                    min_timestamp = file_min
     
     return min_timestamp
 
-def load_buffer_data(policy, satellite_id):
-    """Load buffer data for satellite"""
+def load_buffer_data(strategy_folder, policy, satellite_id):
+    """Load buffer data for satellite from strategy folder"""
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
+    
+    if not simulation_logs_zip.exists():
+        return None
+    
     sat_num = satellite_id.split("-")[0] if "-" in satellite_id else satellite_id
-    policy_dirs = get_policy_dirs()
+    policy_dirs = get_policy_dirs(strategy_folder)
     
     if policy not in policy_dirs:
         return None
-        
-    buffer_file = policy_dirs[policy] / f"meas-MB-buffered-sat-{int(sat_num):010d}.csv"
-    if not buffer_file.exists():
-        return None
-        
-    df = pd.read_csv(buffer_file)
-    # Keep only first 2 columns
-    df = df.iloc[:, :2]
-    df.columns = ["timestamp", "buffer_mb"]
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
     
-    # Use global time reference for consistent hours across all policies
-    global_min_time = get_global_time_reference()
-    df["hours"] = (df["timestamp"] - global_min_time).dt.total_seconds() / 3600
-    df["buffer_mb"] = pd.to_numeric(df["buffer_mb"], errors='coerce')
+    buffer_file_path = f"{policy}/meas-MB-buffered-sat-{int(sat_num):010d}.csv"
     
-    return df
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        if buffer_file_path not in zipf.namelist():
+            return None
+            
+        with zipf.open(buffer_file_path) as file:
+            df = pd.read_csv(file)
+            # Keep only first 2 columns
+            df = df.iloc[:, :2]
+            df.columns = ["timestamp", "buffer_mb"]
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            
+            # Use global time reference for consistent hours across all policies
+            global_min_time = get_global_time_reference(strategy_folder)
+            df["hours"] = (df["timestamp"] - global_min_time).dt.total_seconds() / 3600
+            df["buffer_mb"] = pd.to_numeric(df["buffer_mb"], errors='coerce')
+            
+            return df
 
-def get_orbital_passes():
+def get_orbital_passes(strategy_folder):
     """Get orbital pass times using global time reference"""
-    policy_dirs = get_policy_dirs()
-    global_min_time = get_global_time_reference()
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
     
-    for policy_dir in policy_dirs.values():
-        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-        if not tx_rx_file.exists():
-            continue
-            
-        df = pd.read_csv(tx_rx_file)
-        # Keep only first 2 columns
-        df = df.iloc[:, :2]
-        df.columns = ["timestamp", "satellite"]
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        
-        # Use global time reference for consistent hours across all policies
-        df["hours"] = (df["timestamp"] - global_min_time).dt.total_seconds() / 3600
-        
-        active_times = sorted(df[df["satellite"].notnull()]["hours"].tolist())
-        if not active_times:
-            continue
-            
-        # Group into passes
-        passes = []
-        start, last = None, None
-        for time in active_times:
-            if last is None or (time - last) > 0.5:  # 30min gap
+    if not simulation_logs_zip.exists():
+        return []
+    
+    policy_dirs = get_policy_dirs(strategy_folder)
+    global_min_time = get_global_time_reference(strategy_folder)
+    
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        for policy in policy_dirs.keys():
+            tx_rx_file_path = f"{policy}/meas-downlink-tx-rx.csv"
+            if tx_rx_file_path not in zipf.namelist():
+                continue
+                
+            with zipf.open(tx_rx_file_path) as file:
+                df = pd.read_csv(file)
+                # Keep only first 2 columns
+                df = df.iloc[:, :2]
+                df.columns = ["timestamp", "satellite"]
+                df["timestamp"] = pd.to_datetime(df["timestamp"])
+                
+                # Use global time reference for consistent hours across all policies
+                df["hours"] = (df["timestamp"] - global_min_time).dt.total_seconds() / 3600
+                
+                active_times = sorted(df[df["satellite"].notnull()]["hours"].tolist())
+                if not active_times:
+                    continue
+                    
+                # Group into passes
+                passes = []
+                start, last = None, None
+                for time in active_times:
+                    if last is None or (time - last) > 0.5:  # 30min gap
+                        if start is not None:
+                            passes.append((start, last))
+                        start = time
+                    last = time
                 if start is not None:
                     passes.append((start, last))
-                start = time
-            last = time
-        if start is not None:
-            passes.append((start, last))
-            
-        return passes
+                    
+                return passes
     
     return []
 
-def create_plot(output_dir=None):
-    """Create buffer comparison plot"""
+def create_plot(strategy_folder, strategy_name, constellation_analysis_folder):
+    """Create buffer comparison plot for a specific strategy"""
     config = read_config()
-    top_satellites, all_totals = get_top_satellites()
-    passes = get_orbital_passes()
+    top_satellites, all_totals = get_top_satellites(strategy_folder)
+    passes = get_orbital_passes(strategy_folder)
     
     if not top_satellites:
-        print("No satellite data found!")
+        print(f"No satellite data found for {strategy_name}!")
         return
     
     fig, axes = plt.subplots(2, 2, figsize=(28, 24))  # Increased size for 50-satellite legend
     
     # Create enhanced title
-    title_lines = ["Satellite Constellation Buffer Analysis"]
+    title_lines = [f"Satellite Constellation Buffer Analysis - {strategy_name.title()} Strategy"]
     
     # Add constellation parameters
     sat_count = config.get('satellite_count', 'Unknown')
@@ -244,7 +304,7 @@ def create_plot(output_dir=None):
             sat_total = all_totals.get(sat_id, {}).get(policy, 0)
             color = all_colors[j % len(all_colors)]
             
-            buffer_df = load_buffer_data(policy, sat_id)
+            buffer_df = load_buffer_data(strategy_folder, policy, sat_id)
             if buffer_df is None or sat_total == 0:
                 # No buffer data file found or no downlink data - use greyed line at zero
                 line = ax.axhline(0, color='lightgray', alpha=0.3, linestyle='--', linewidth=0.5)
@@ -279,53 +339,51 @@ def create_plot(output_dir=None):
         ax.grid(True, alpha=0.3)
         ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
     
-    # Save plot - use provided output directory or create timestamped one
-    if output_dir is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = SCRIPT_DIR / f"buffer_analysis_{timestamp}"
-        output_dir.mkdir(exist_ok=True)
-        
-        # Create log archive only if we're creating our own directory
-        create_log_archive(output_dir)
-        print(f"Analysis complete! Generated plot with {len(passes)} orbital passes -> {output_dir}/buffer_comparison.png")
-    else:
-        # Just save the plot when called from combined analysis
-        pass
+    # Save plot in the constellation analysis folder with strategy-specific naming
+    output_filename = f"buffer_plot_{strategy_name}_strategy.png"
+    output_path = constellation_analysis_folder / output_filename
     
     plt.tight_layout()
-    plt.savefig(output_dir / "buffer_comparison.png", dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     
-    if output_dir.parent == SCRIPT_DIR:  # Only print if we created our own directory
-        print(f"Analysis complete! Generated plot with {len(passes)} orbital passes -> {output_dir}/buffer_comparison.png")
-
-def create_log_archive(output_dir):
-    """Create a zip archive of all simulation logs"""
-    archive_path = output_dir / "simulation_logs.zip"
-    
-    with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for policy in POLICIES:
-            policy_dir = LOGS_DIR / policy
-            if policy_dir.exists():
-                for log_file in policy_dir.glob("*.csv"):
-                    # Add file to zip with policy folder structure
-                    arcname = f"{policy}/{log_file.name}"
-                    zipf.write(log_file, arcname)
-    
-    print(f"Created log archive: {archive_path}")
-    return archive_path
+    print(f"Generated {strategy_name} buffer plot with {len(passes)} orbital passes -> {output_path}")
+    return output_path
 
 def main():
     """Main function"""
     print("Multi-Satellite Buffer Analysis")
     
-    policy_dirs = get_policy_dirs()
-    if not policy_dirs:
-        print("No simulation logs found!")
-        print("Please run simulations first using the scripts in the scripts/ directory.")
+    # Extract constellation analysis data
+    constellation_analysis_folder = extract_constellation_data()
+    if not constellation_analysis_folder:
+        print("No constellation analysis data found!")
+        print("Please run constellation analysis first.")
         return
     
-    create_plot()  # Use default behavior when run standalone
+    print(f"Processing constellation analysis folder: {constellation_analysis_folder.name}")
+    
+    # Process each strategy
+    generated_plots = []
+    for strategy in STRATEGIES:
+        strategy_folder = constellation_analysis_folder / strategy
+        if strategy_folder.exists():
+            print(f"\nProcessing {strategy} strategy...")
+            try:
+                output_path = create_plot(strategy_folder, strategy, constellation_analysis_folder)
+                if output_path:
+                    generated_plots.append(output_path)
+            except Exception as e:
+                print(f"Error processing {strategy} strategy: {e}")
+        else:
+            print(f"Strategy folder not found: {strategy}")
+    
+    if generated_plots:
+        print(f"\nBuffer analysis complete! Generated {len(generated_plots)} plots:")
+        for plot_path in generated_plots:
+            print(f"  {plot_path}")
+    else:
+        print("No plots were generated.")
 
 if __name__ == "__main__":
     main()

@@ -12,12 +12,35 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
 import zipfile
+import glob
 
 # Configuration - use absolute paths
 SCRIPT_DIR = Path(__file__).parent.absolute()
 LOGS_DIR = SCRIPT_DIR / "logs"
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
+STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 TOP_N = 15
+
+def extract_constellation_data():
+    """Extract data from constellation_analysis folders"""
+    constellation_folders = []
+    
+    # Look for constellation_analysis folders in the current directory
+    pattern = str(SCRIPT_DIR / "constellation_analysis_*")
+    for folder_path in glob.glob(pattern):
+        folder = Path(folder_path)
+        if folder.is_dir():
+            constellation_folders.append(folder)
+    
+    if not constellation_folders:
+        print("No constellation_analysis folders found!")
+        return None
+    
+    # Use the most recent constellation analysis folder
+    latest_folder = max(constellation_folders, key=lambda x: x.stat().st_mtime)
+    print(f"Using constellation analysis folder: {latest_folder.name}")
+    
+    return latest_folder
 
 def read_config():
     """Read simulation configuration"""
@@ -53,137 +76,159 @@ def read_config():
     
     return config
 
-def get_policy_dirs():
-    """Get policy directories"""
+def get_policy_dirs(strategy_folder):
+    """Get policy directories from strategy simulation_logs.zip"""
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
+    
+    if not simulation_logs_zip.exists():
+        return {}
+    
     dirs = {}
-    for policy in POLICIES:
-        policy_dir = LOGS_DIR / policy
-        if policy_dir.exists():
-            dirs[policy] = policy_dir
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        # Check which policies have data in the zip
+        for policy in POLICIES:
+            policy_files = [name for name in zipf.namelist() if name.startswith(f"{policy}/")]
+            if policy_files:
+                dirs[policy] = policy  # Store policy name, we'll extract from zip
+    
     return dirs
 
-def get_active_satellites():
-    """Get satellites that have any downlink activity"""
-    policy_dirs = get_policy_dirs()
+def get_active_satellites(strategy_folder):
+    """Get satellites that have any downlink activity from strategy folder"""
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
+    
+    if not simulation_logs_zip.exists():
+        return []
+    
+    policy_dirs = get_policy_dirs(strategy_folder)
     all_satellites = set()
     
-    for policy, policy_dir in policy_dirs.items():
-        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-        if tx_rx_file.exists():
-            tx_rx_df = pd.read_csv(tx_rx_file)
-            tx_rx_df = tx_rx_df.iloc[:, :2]
-            tx_rx_df.columns = ["timestamp", "satellite"]
-            
-            # Get unique satellites (excluding None/NaN)
-            satellites = tx_rx_df["satellite"].dropna()
-            satellites = satellites[satellites != "None"]
-            all_satellites.update(satellites.unique())
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        for policy in policy_dirs.keys():
+            tx_rx_file_path = f"{policy}/meas-downlink-tx-rx.csv"
+            if tx_rx_file_path in zipf.namelist():
+                with zipf.open(tx_rx_file_path) as file:
+                    tx_rx_df = pd.read_csv(file)
+                    tx_rx_df = tx_rx_df.iloc[:, :2]
+                    tx_rx_df.columns = ["timestamp", "satellite"]
+                    
+                    # Get unique satellites (excluding None/NaN)
+                    satellites = tx_rx_df["satellite"].dropna()
+                    satellites = satellites[satellites != "None"]
+                    all_satellites.update(satellites.unique())
     
     return sorted(list(all_satellites))
 
-def calculate_cumulative_idle_time_for_policy(policy_dir, satellites):
+def calculate_cumulative_idle_time_for_policy(strategy_folder, policy, satellites):
     """Calculate cumulative idle time over time for a specific policy"""
-    print(f"    Calculating cumulative idle time for {policy_dir.name}...")
+    print(f"    Calculating cumulative idle time for {policy}...")
     
-    # Load tx-rx data to get the time baseline
-    tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-    if not tx_rx_file.exists():
-        print(f"    No tx-rx file found for {policy_dir.name}")
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
+    
+    if not simulation_logs_zip.exists():
         return {}
     
-    tx_rx_df = pd.read_csv(tx_rx_file)
-    tx_rx_df = tx_rx_df.iloc[:, :2]
-    tx_rx_df.columns = ["timestamp", "satellite"]
-    tx_rx_df["timestamp"] = pd.to_datetime(tx_rx_df["timestamp"])
-    
-    # Get global time reference
-    global_min_time = tx_rx_df["timestamp"].min()
-    tx_rx_df["hours"] = (tx_rx_df["timestamp"] - global_min_time).dt.total_seconds() / 3600
-    
-    cumulative_idle_data = {}
-    
-    for satellite in satellites:
-        # Get timesteps when this satellite is connected
-        connected_entries = tx_rx_df[tx_rx_df["satellite"] == satellite]
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        # Load tx-rx data to get the time baseline
+        tx_rx_file_path = f"{policy}/meas-downlink-tx-rx.csv"
+        if tx_rx_file_path not in zipf.namelist():
+            print(f"    No tx-rx file found for {policy}")
+            return {}
         
-        if connected_entries.empty:
-            cumulative_idle_data[satellite] = {"hours": [], "cumulative_idle": []}
-            continue
-        
-        # Load buffer data for this satellite
-        # Convert satellite ID format: 60518000-0 -> 0060518000 for buffer file lookup
-        if satellite.endswith("-0"):
-            sat_base = satellite[:-2]  # Remove "-0" -> 60518000
-            sat_id = sat_base.zfill(10)  # 60518000 -> 0060518000
-        else:
-            sat_id = satellite.zfill(10)
-        
-        buffer_file = policy_dir / f"meas-MB-buffered-sat-{sat_id}.csv"
-        
-        if not buffer_file.exists():
-            cumulative_idle_data[satellite] = {"hours": [], "cumulative_idle": []}
-            continue
-        
-        buffer_df = pd.read_csv(buffer_file)
-        buffer_df = buffer_df.iloc[:, :2]
-        buffer_df.columns = ["timestamp", "buffer_mb"]
-        buffer_df["timestamp"] = pd.to_datetime(buffer_df["timestamp"])
-        buffer_df["buffer_mb"] = pd.to_numeric(buffer_df["buffer_mb"], errors='coerce')
-        buffer_df["hours"] = (buffer_df["timestamp"] - global_min_time).dt.total_seconds() / 3600
-        
-        # Calculate cumulative idle time: count timesteps where connected AND buffer = 0
-        hours_list = []
-        cumulative_idle_list = []
-        cumulative_idle = 0
-        
-        # Merge connection and buffer data by timestamp
-        for _, conn_row in connected_entries.iterrows():
-            conn_time = conn_row["timestamp"]
-            conn_hours = conn_row["hours"]
+        with zipf.open(tx_rx_file_path) as file:
+            tx_rx_df = pd.read_csv(file)
+            tx_rx_df = tx_rx_df.iloc[:, :2]
+            tx_rx_df.columns = ["timestamp", "satellite"]
+            tx_rx_df["timestamp"] = pd.to_datetime(tx_rx_df["timestamp"])
             
-            # Find buffer level at this timestamp
-            buffer_at_time = buffer_df[buffer_df["timestamp"] == conn_time]["buffer_mb"]
-            
-            if len(buffer_at_time) > 0 and buffer_at_time.iloc[0] == 0.0:
-                cumulative_idle += 1
-            
-            hours_list.append(conn_hours)
-            cumulative_idle_list.append(cumulative_idle)
+            # Get global time reference
+            global_min_time = tx_rx_df["timestamp"].min()
+            tx_rx_df["hours"] = (tx_rx_df["timestamp"] - global_min_time).dt.total_seconds() / 3600
         
-        cumulative_idle_data[satellite] = {
-            "hours": hours_list,
-            "cumulative_idle": cumulative_idle_list
-        }
+        cumulative_idle_data = {}
         
-        if cumulative_idle > 0:
-            print(f"      Satellite {satellite}: {cumulative_idle} total idle timesteps")
+        for satellite in satellites:
+            # Get timesteps when this satellite is connected
+            connected_entries = tx_rx_df[tx_rx_df["satellite"] == satellite]
+            
+            if connected_entries.empty:
+                cumulative_idle_data[satellite] = {"hours": [], "cumulative_idle": []}
+                
+            # Load buffer data for this satellite
+            # Convert satellite ID format: 60518000-0 -> 0060518000 for buffer file lookup
+            if satellite.endswith("-0"):
+                sat_base = satellite[:-2]  # Remove "-0" -> 60518000
+                sat_id = sat_base.zfill(10)  # 60518000 -> 0060518000
+            else:
+                sat_id = satellite.zfill(10)
+            
+            buffer_file_path = f"{policy}/meas-MB-buffered-sat-{sat_id}.csv"
+            
+            if buffer_file_path not in zipf.namelist():
+                cumulative_idle_data[satellite] = {"hours": [], "cumulative_idle": []}
+                continue
+            
+            with zipf.open(buffer_file_path) as buffer_file:
+                buffer_df = pd.read_csv(buffer_file)
+                buffer_df = buffer_df.iloc[:, :2]
+                buffer_df.columns = ["timestamp", "buffer_mb"]
+                buffer_df["timestamp"] = pd.to_datetime(buffer_df["timestamp"])
+                buffer_df["buffer_mb"] = pd.to_numeric(buffer_df["buffer_mb"], errors='coerce')
+                buffer_df["hours"] = (buffer_df["timestamp"] - global_min_time).dt.total_seconds() / 3600
+                
+                # Calculate cumulative idle time: count timesteps where connected AND buffer = 0
+                hours_list = []
+                cumulative_idle_list = []
+                cumulative_idle = 0
+                
+                # Merge connection and buffer data by timestamp
+                for _, conn_row in connected_entries.iterrows():
+                    conn_time = conn_row["timestamp"]
+                    conn_hours = conn_row["hours"]
+                    
+                    # Find buffer level at this timestamp
+                    buffer_at_time = buffer_df[buffer_df["timestamp"] == conn_time]["buffer_mb"]
+                    
+                    if len(buffer_at_time) > 0 and buffer_at_time.iloc[0] == 0.0:
+                        cumulative_idle += 1
+                    
+                    hours_list.append(conn_hours)
+                    cumulative_idle_list.append(cumulative_idle)
+                
+                cumulative_idle_data[satellite] = {
+                    "hours": hours_list,
+                    "cumulative_idle": cumulative_idle_list
+                }
+                
+                if cumulative_idle > 0:
+                    print(f"      Satellite {satellite}: {cumulative_idle} total idle timesteps")
     
     return cumulative_idle_data
 
-def analyze_idle_times():
-    """Analyze idle times for all policies"""
+def analyze_idle_times(strategy_folder):
+    """Analyze idle times for all policies in strategy folder"""
     print("Analyzing downlink idle times...")
     
-    policy_dirs = get_policy_dirs()
+    policy_dirs = get_policy_dirs(strategy_folder)
     if not policy_dirs:
         print("No policy directories found!")
-        return None
+        return None, None
     
     # Get all active satellites
-    satellites = get_active_satellites()
+    satellites = get_active_satellites(strategy_folder)
     print(f"Found {len(satellites)} active satellites")
     
     results = {}
     
-    for policy, policy_dir in policy_dirs.items():
+    for policy in policy_dirs.keys():
         print(f"  Processing {policy} policy...")
-        cumulative_data = calculate_cumulative_idle_time_for_policy(policy_dir, satellites)
+        cumulative_data = calculate_cumulative_idle_time_for_policy(strategy_folder, policy, satellites)
         results[policy] = cumulative_data
     
     return results, satellites
 
-def create_idle_time_charts(results, satellites, config):
-    """Create idle time comparison charts similar to buffer comparison"""
+def create_idle_time_charts(strategy_folder, strategy_name, constellation_analysis_folder, results, satellites, config):
+    """Create idle time comparison charts for a specific strategy"""
     if not results:
         print("No results to plot!")
         return
@@ -199,16 +244,11 @@ def create_idle_time_charts(results, satellites, config):
                 total += sat_data["cumulative_idle"][-1]
         policy_totals[policy] = total
     
-    print("\nTotal idle timesteps by policy:")
+    print(f"\nTotal idle timesteps by policy for {strategy_name}:")
     for policy, total in policy_totals.items():
         timestep_duration = config.get('frame_spacing', 1.0)
         total_seconds = total * timestep_duration
         print(f"  {policy}: {total} timesteps ({total_seconds:.1f} seconds)")
-    
-    # Create output directory with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = SCRIPT_DIR / f"constellation_analysis_{timestamp}"
-    output_dir.mkdir(exist_ok=True)
     
     # Set up the plotting style
     plt.style.use('default')
@@ -218,7 +258,7 @@ def create_idle_time_charts(results, satellites, config):
     fig, axes = plt.subplots(2, 2, figsize=(28, 24))
     
     # Create enhanced title
-    title_lines = ["Satellite Constellation Idle Time Analysis"]
+    title_lines = [f"Satellite Constellation Idle Time Analysis - {strategy_name.title()} Strategy"]
     
     # Add constellation parameters
     sat_count = config.get('satellite_count', 'Unknown')
@@ -300,61 +340,60 @@ def create_idle_time_charts(results, satellites, config):
     
     plt.tight_layout()
     
-    # Save line chart
-    line_chart_path = output_dir / "idle_time_comparison.png"
-    plt.savefig(line_chart_path, dpi=300, bbox_inches='tight')
-    print(f"Saved idle time line chart: {line_chart_path}")
+    # Save plot in the constellation analysis folder with strategy-specific naming
+    output_filename = f"idle_plot_{strategy_name}_strategy.png"
+    output_path = constellation_analysis_folder / output_filename
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     
-    # 2. Bar chart showing total idle time by policy
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    policies = list(policy_totals.keys())
-    totals = list(policy_totals.values())
-    
-    bars = ax.bar(policies, totals, color=colors[:len(policies)])
-    
-    # Add value labels on bars
-    for bar, total in zip(bars, totals):
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height + max(totals)*0.01,
-                f'{int(total)}', ha='center', va='bottom', fontweight='bold')
-    
-    ax.set_xlabel('Scheduling Policy', fontsize=12)
-    ax.set_ylabel('Total Idle Timesteps', fontsize=12)
-    ax.set_title('Total Downlink Idle Time by Policy', fontsize=14, fontweight='bold')
-    ax.grid(True, alpha=0.3, axis='y')
-    
-    # Capitalize policy names
-    ax.set_xticklabels([policy.capitalize() for policy in policies])
-    
-    plt.tight_layout()
-    
-    # Save bar chart
-    bar_chart_path = output_dir / "idle_time_bars.png"
-    plt.savefig(bar_chart_path, dpi=300, bbox_inches='tight')
-    print(f"Saved idle time bar chart: {bar_chart_path}")
-    plt.close()
-    
-    return output_dir
+    print(f"Generated {strategy_name} idle plot -> {output_path}")
+    return output_path
 
 def main():
     """Main execution function"""
     print("=== Multi-Satellite Downlink Idle Time Analysis ===")
     
+    # Extract constellation analysis data
+    constellation_analysis_folder = extract_constellation_data()
+    if not constellation_analysis_folder:
+        print("No constellation analysis data found!")
+        print("Please run constellation analysis first.")
+        return
+    
+    print(f"Processing constellation analysis folder: {constellation_analysis_folder.name}")
+    
     # Read configuration
     config = read_config()
     print(f"Configuration: {config}")
     
-    # Analyze idle times
-    results, satellites = analyze_idle_times()
+    # Process each strategy
+    generated_plots = []
+    for strategy in STRATEGIES:
+        strategy_folder = constellation_analysis_folder / strategy
+        if strategy_folder.exists():
+            print(f"\nProcessing {strategy} strategy...")
+            try:
+                # Analyze idle times for this strategy
+                results, satellites = analyze_idle_times(strategy_folder)
+                
+                if results:
+                    # Create charts
+                    output_path = create_idle_time_charts(strategy_folder, strategy, constellation_analysis_folder, results, satellites, config)
+                    if output_path:
+                        generated_plots.append(output_path)
+                else:
+                    print(f"No results generated for {strategy} strategy!")
+            except Exception as e:
+                print(f"Error processing {strategy} strategy: {e}")
+        else:
+            print(f"Strategy folder not found: {strategy}")
     
-    if results:
-        # Create charts
-        output_dir = create_idle_time_charts(results, satellites, config)
-        print(f"\nAnalysis complete! Charts saved to: {output_dir}")
+    if generated_plots:
+        print(f"\nIdle time analysis complete! Generated {len(generated_plots)} plots:")
+        for plot_path in generated_plots:
+            print(f"  {plot_path}")
     else:
-        print("No results generated!")
+        print("No plots were generated.")
 
 if __name__ == "__main__":
     main()

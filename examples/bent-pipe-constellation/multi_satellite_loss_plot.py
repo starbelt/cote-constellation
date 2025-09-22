@@ -11,12 +11,35 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
 import zipfile
+import glob
 
 # Configuration - use absolute paths
 SCRIPT_DIR = Path(__file__).parent.absolute()
 LOGS_DIR = SCRIPT_DIR / "logs"
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
+STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 TOP_N = 15
+
+def extract_constellation_data():
+    """Extract data from constellation_analysis folders"""
+    constellation_folders = []
+    
+    # Look for constellation_analysis folders in the current directory
+    pattern = str(SCRIPT_DIR / "constellation_analysis_*")
+    for folder_path in glob.glob(pattern):
+        folder = Path(folder_path)
+        if folder.is_dir():
+            constellation_folders.append(folder)
+    
+    if not constellation_folders:
+        print("No constellation_analysis folders found!")
+        return None
+    
+    # Use the most recent constellation analysis folder
+    latest_folder = max(constellation_folders, key=lambda x: x.stat().st_mtime)
+    print(f"Using constellation analysis folder: {latest_folder.name}")
+    
+    return latest_folder
 
 def read_config():
     """Read simulation configuration"""
@@ -31,11 +54,8 @@ def read_config():
                 header = lines[0].strip().split(',')
                 values = lines[1].strip().split(',')
                 for i, key in enumerate(header):
-                    if i < len(values):
-                        if key == 'bits-per-sense':
-                            config['mb_per_sense'] = int(values[i]) / (8 * 1024 * 1024)
-                        elif key == 'max-buffer-mb':
-                            config['max_buffer_mb'] = float(values[i])
+                    if i < len(values) and key == 'bits-per-sense':
+                        config['mb_per_sense'] = int(values[i]) / (8 * 1024 * 1024)
     
     # Constellation config
     constellation_file = SCRIPT_DIR / "configuration/constellation.dat"
@@ -55,282 +75,268 @@ def read_config():
     
     return config
 
-def get_policy_dirs():
-    """Get policy directories"""
+def get_policy_dirs(strategy_folder):
+    """Get policy directories from strategy simulation_logs.zip"""
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
+    
+    if not simulation_logs_zip.exists():
+        return {}
+    
     dirs = {}
-    for policy in POLICIES:
-        policy_dir = LOGS_DIR / policy
-        if policy_dir.exists():
-            dirs[policy] = policy_dir
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        # Check which policies have data in the zip
+        for policy in POLICIES:
+            policy_files = [name for name in zipf.namelist() if name.startswith(f"{policy}/")]
+            if policy_files:
+                dirs[policy] = policy  # Store policy name, we'll extract from zip
+    
     return dirs
 
-def get_satellites_with_overflow():
-    """Get satellites that have overflow data across all policies"""
-    policy_dirs = get_policy_dirs()
-    all_overflow_sats = set()
+def get_top_satellites(strategy_folder):
+    """Get satellites with most data loss from overflow files in strategy folder"""
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
     
-    for policy, policy_dir in policy_dirs.items():
-        # Find all buffer overflow files
-        overflow_files = list(policy_dir.glob("meas-buffer-overflow-sat-*.csv"))
-        for overflow_file in overflow_files:
-            # Extract satellite ID from filename
-            sat_id = overflow_file.stem.replace("meas-buffer-overflow-sat-", "")
-            all_overflow_sats.add(sat_id)
+    if not simulation_logs_zip.exists():
+        print(f"No simulation_logs.zip found in {strategy_folder}")
+        return [], {}
     
-    return sorted(list(all_overflow_sats))
-
-def get_top_satellites_by_loss():
-    """Get top satellites by total data loss across all policies"""
-    policy_dirs = get_policy_dirs()
+    policy_dirs = get_policy_dirs(strategy_folder)
     all_totals = {}
     
-    print("Scanning overflow files...")
-    for policy, policy_dir in policy_dirs.items():
-        overflow_files = list(policy_dir.glob("meas-buffer-overflow-sat-*.csv"))
-        print(f"  {policy}: {len(overflow_files)} overflow files")
-        
-        for overflow_file in overflow_files:
-            sat_id = overflow_file.stem.replace("meas-buffer-overflow-sat-", "")
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        for policy in policy_dirs.keys():
+            print(f"  Processing {policy} policy...")
             
-            try:
-                df = pd.read_csv(overflow_file)
-                if len(df) > 0:
-                    # Get the final (maximum) cumulative loss - just read last line
-                    df = df.iloc[:, :2]  # Keep only first 2 columns
-                    df.columns = ["timestamp", "loss_mb"]
-                    df["loss_mb"] = pd.to_numeric(df["loss_mb"], errors='coerce')
-                    max_loss = df["loss_mb"].iloc[-1]  # Last value is the maximum cumulative
-                    
-                    if pd.notna(max_loss) and max_loss > 0:
-                        if sat_id not in all_totals:
-                            all_totals[sat_id] = {}
-                        all_totals[sat_id][policy] = max_loss
-            except Exception as e:
-                print(f"Warning: Could not read {overflow_file}: {e}")
-                continue
+            # Check overflow files for actual data lost
+            overflow_files = [name for name in zipf.namelist() 
+                            if name.startswith(f"{policy}/meas-buffer-overflow-sat-") and name.endswith(".csv")]
+            
+            for overflow_file_path in overflow_files:
+                filename = overflow_file_path.split("/")[-1]
+                sat_id_raw = filename.replace("meas-buffer-overflow-sat-", "").replace(".csv", "")
+                
+                # Convert sat_id format: 0060518000 -> 60518000-0
+                if len(sat_id_raw) == 10 and sat_id_raw.startswith("00"):
+                    sat_id = f"{sat_id_raw[2:]}-0"
+                else:
+                    sat_id = f"{sat_id_raw}-0"
+                
+                try:
+                    with zipf.open(overflow_file_path) as file:
+                        loss_df = pd.read_csv(file)
+                        if len(loss_df) > 0:
+                            # Get the final (maximum) cumulative loss
+                            loss_col = loss_df.columns[1]  # Second column should be loss data
+                            final_loss = loss_df[loss_col].iloc[-1]
+                            
+                            if final_loss > 0:
+                                if sat_id not in all_totals:
+                                    all_totals[sat_id] = {}
+                                all_totals[sat_id][policy] = final_loss
+                except Exception as e:
+                    pass  # Skip files that can't be read
     
     # Get top satellites by max loss
-    sat_max = {sat: max(policies.values()) for sat, policies in all_totals.items()}
-    top_sats = sorted(sat_max.items(), key=lambda x: x[1], reverse=True)[:TOP_N]
-    
-    print(f"Found {len(all_totals)} satellites with data loss")
-    return [sat for sat, _ in top_sats], all_totals
+    if all_totals:
+        sat_max = {sat: max(policies.values()) for sat, policies in all_totals.items()}
+        top_sats = sorted(sat_max.items(), key=lambda x: x[1], reverse=True)[:TOP_N]
+        return [sat for sat, _ in top_sats], all_totals
+    else:
+        return [], {}
 
-# Cache for global time reference to avoid repeated expensive calculations
-_global_time_cache = None
-
-def get_global_time_reference():
+def get_global_time_reference(strategy_folder):
     """Get global minimum timestamp across all policies for consistent time reference"""
-    global _global_time_cache
-    if _global_time_cache is not None:
-        return _global_time_cache
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
     
-    policy_dirs = get_policy_dirs()
+    if not simulation_logs_zip.exists():
+        return None
+    
+    policy_dirs = get_policy_dirs(strategy_folder)
     min_timestamp = None
     
-    # Check ALL possible timestamp sources to find the absolute earliest time
-    for policy_dir in policy_dirs.values():
-        # Check tx-rx files first (these typically start earliest)
-        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-        if tx_rx_file.exists():
-            try:
-                df = pd.read_csv(tx_rx_file)
-                if len(df) > 0:
-                    df = df.iloc[:, :2]
-                    df.columns = ["timestamp", "satellite"]
-                    df["timestamp"] = pd.to_datetime(df["timestamp"])
-                    file_min = df["timestamp"].min()
-                    if min_timestamp is None or file_min < min_timestamp:
-                        min_timestamp = file_min
-            except:
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        for policy in policy_dirs.keys():
+            tx_rx_file_path = f"{policy}/meas-downlink-tx-rx.csv"
+            if tx_rx_file_path not in zipf.namelist():
                 continue
-        
-        # Also check buffer files for completeness
-        buffer_files = list(policy_dir.glob("meas-MB-buffered-sat-*.csv"))
-        for buffer_file in buffer_files[:5]:  # Check first 5 buffer files
-            try:
-                df = pd.read_csv(buffer_file)
-                if len(df) > 0:
-                    df = df.iloc[:, :2]
-                    df.columns = ["timestamp", "buffer_mb"]
-                    df["timestamp"] = pd.to_datetime(df["timestamp"])
-                    file_min = df["timestamp"].min()
-                    if min_timestamp is None or file_min < min_timestamp:
-                        min_timestamp = file_min
-                    break  # Just check one buffer file per policy
-            except:
-                continue
-        
-        # Check overflow files last (these typically start later)
-        overflow_files = list(policy_dir.glob("meas-buffer-overflow-sat-*.csv"))
-        for overflow_file in overflow_files[:5]:  # Check first 5 overflow files
-            try:
-                df = pd.read_csv(overflow_file)
-                if len(df) > 0:
-                    df = df.iloc[:, :2]
-                    df.columns = ["timestamp", "loss_mb"]
-                    df["timestamp"] = pd.to_datetime(df["timestamp"])
-                    file_min = df["timestamp"].min()
-                    if min_timestamp is None or file_min < min_timestamp:
-                        min_timestamp = file_min
-                    break  # Just check one overflow file per policy
-            except:
-                continue
+                
+            with zipf.open(tx_rx_file_path) as file:
+                df = pd.read_csv(file)
+                df = df.iloc[:, :2]
+                df.columns = ["timestamp", "satellite"]
+                df["timestamp"] = pd.to_datetime(df["timestamp"])
+                
+                file_min = df["timestamp"].min()
+                if min_timestamp is None or file_min < min_timestamp:
+                    min_timestamp = file_min
     
-    _global_time_cache = min_timestamp
     return min_timestamp
 
-def load_loss_data(policy, satellite_id):
-    """Load cumulative loss data for satellite"""
-    policy_dirs = get_policy_dirs()
+def load_loss_data(strategy_folder, policy, satellite_id):
+    """Load loss data for satellite from strategy folder"""
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
+    
+    if not simulation_logs_zip.exists():
+        return None
+    
+    sat_num = satellite_id.split("-")[0] if "-" in satellite_id else satellite_id
+    policy_dirs = get_policy_dirs(strategy_folder)
     
     if policy not in policy_dirs:
         return None
-        
-    overflow_file = policy_dirs[policy] / f"meas-buffer-overflow-sat-{satellite_id}.csv"
-    if not overflow_file.exists():
-        return None
-        
-    try:
-        df = pd.read_csv(overflow_file)
-        if len(df) == 0:
+    
+    # Convert satellite ID format for overflow file lookup
+    # Files are named like meas-buffer-overflow-sat-60518001.csv (no leading zeros)
+    sat_id_padded = sat_num  # Don't pad with leading zeros
+    overflow_file_path = f"{policy}/meas-buffer-overflow-sat-{sat_id_padded}.csv"
+    
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        if overflow_file_path not in zipf.namelist():
             return None
             
-        # Keep only first 2 columns
-        df = df.iloc[:, :2]
-        df.columns = ["timestamp", "loss_mb"]
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        
-        # Use global time reference for consistent hours across all policies
-        global_min_time = get_global_time_reference()
-        df["hours"] = (df["timestamp"] - global_min_time).dt.total_seconds() / 3600
-        df["loss_mb"] = pd.to_numeric(df["loss_mb"], errors='coerce')
-        
-        return df
-    except Exception as e:
-        print(f"Warning: Could not read {overflow_file}: {e}")
-        return None
+        with zipf.open(overflow_file_path) as file:
+            df = pd.read_csv(file)
+            
+            if df.empty:
+                return None
+                
+            # Handle 3-column format by taking first 2 columns
+            if len(df.columns) == 3:
+                df = df.iloc[:, :2]
+            
+            # Rename columns for clarity - the second column has satellite-specific name
+            df.columns = ["timestamp", "cumulative_loss_mb"]
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            
+            # Use global time reference for consistent hours across all policies
+            global_min_time = get_global_time_reference(strategy_folder)
+            df["hours"] = (df["timestamp"] - global_min_time).dt.total_seconds() / 3600
+            df["cumulative_loss_mb"] = pd.to_numeric(df["cumulative_loss_mb"], errors='coerce')
+            
+            return df
 
-def get_orbital_passes():
+def get_orbital_passes(strategy_folder):
     """Get orbital pass times using global time reference"""
-    policy_dirs = get_policy_dirs()
-    global_min_time = get_global_time_reference()
+    simulation_logs_zip = strategy_folder / "simulation_logs.zip"
     
-    for policy_dir in policy_dirs.values():
-        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-        if not tx_rx_file.exists():
-            continue
-            
-        df = pd.read_csv(tx_rx_file)
-        # Keep only first 2 columns
-        df = df.iloc[:, :2]
-        df.columns = ["timestamp", "satellite"]
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        
-        # Use global time reference for consistent hours across all policies
-        df["hours"] = (df["timestamp"] - global_min_time).dt.total_seconds() / 3600
-        
-        active_times = sorted(df[df["satellite"].notnull()]["hours"].tolist())
-        if not active_times:
-            continue
-            
-        # Group into passes
-        passes = []
-        start, last = None, None
-        for time in active_times:
-            if last is None or (time - last) > 0.5:  # 30min gap
+    if not simulation_logs_zip.exists():
+        return []
+    
+    policy_dirs = get_policy_dirs(strategy_folder)
+    global_min_time = get_global_time_reference(strategy_folder)
+    
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        for policy in policy_dirs.keys():
+            tx_rx_file_path = f"{policy}/meas-downlink-tx-rx.csv"
+            if tx_rx_file_path not in zipf.namelist():
+                continue
+                
+            with zipf.open(tx_rx_file_path) as file:
+                df = pd.read_csv(file)
+                # Keep only first 2 columns
+                df = df.iloc[:, :2]
+                df.columns = ["timestamp", "satellite"]
+                df["timestamp"] = pd.to_datetime(df["timestamp"])
+                
+                # Use global time reference for consistent hours across all policies
+                df["hours"] = (df["timestamp"] - global_min_time).dt.total_seconds() / 3600
+                
+                active_times = sorted(df[df["satellite"].notnull()]["hours"].tolist())
+                if not active_times:
+                    continue
+                    
+                # Group into passes
+                passes = []
+                start, last = None, None
+                for time in active_times:
+                    if last is None or (time - last) > 0.5:  # 30min gap
+                        if start is not None:
+                            passes.append((start, last))
+                        start = time
+                    last = time
                 if start is not None:
                     passes.append((start, last))
-                start = time
-            last = time
-        if start is not None:
-            passes.append((start, last))
-            
-        return passes
+                    
+                return passes
     
     return []
 
-def create_plot():
-    """Create data loss comparison plot"""
-    print("Starting data loss analysis...")
+def create_plot(strategy_folder, strategy_name, constellation_analysis_folder):
+    """Create buffer comparison plot for a specific strategy"""
     config = read_config()
-    top_satellites, all_totals = get_top_satellites_by_loss()
-    passes = get_orbital_passes()
+    top_satellites, all_totals = get_top_satellites(strategy_folder)
+    passes = get_orbital_passes(strategy_folder)
     
     if not top_satellites:
-        print("No data loss found! This means buffer caps are working well or are set too high.")
-        print("Consider reducing max-buffer-mb in sensor.dat to see overflow behavior.")
-        print("Creating charts anyway - they will show zero losses.")
-        # Use a dummy satellite list for the chart structure
-        top_satellites = ['00001', '00002', '00003']  # Show a few satellites with zero loss
-        all_totals = {}
+        print(f"No satellite data found for {strategy_name}!")
+        return
     
-    print(f"Creating plots for {len(top_satellites)} satellites...")
     fig, axes = plt.subplots(2, 2, figsize=(28, 24))  # Increased size for 50-satellite legend
     
     # Create enhanced title
-    title_lines = ["Satellite Constellation Data Loss Analysis"]
+    title_lines = [f"Satellite Constellation Data Loss Analysis - {strategy_name.title()} Strategy"]
     
     # Add constellation parameters
     sat_count = config.get('satellite_count', 'Unknown')
     frame_spacing = config.get('frame_spacing')
     mb_per_sense = config.get('mb_per_sense')
-    max_buffer_mb = config.get('max_buffer_mb')
     
     if sat_count != 'Unknown' and frame_spacing and mb_per_sense:
-        buffer_info = f" | Buffer Cap: {max_buffer_mb:.0f} MB" if max_buffer_mb else ""
-        title_lines.append(f"{sat_count} Satellites | Frame Rate: 1 image/{frame_spacing:.1f}s | Image Size: {mb_per_sense:.2f} MB{buffer_info}")
+        title_lines.append(f"{sat_count} Satellites | Frame Rate: 1 image/{frame_spacing:.1f}s | Image Size: {mb_per_sense:.2f} MB")
     elif mb_per_sense:
-        buffer_info = f" | Buffer Cap: {max_buffer_mb:.0f} MB" if max_buffer_mb else ""
-        title_lines.append(f"Image Size: {mb_per_sense:.2f} MB{buffer_info}")
+        title_lines.append(f"Image Size: {mb_per_sense:.2f} MB")
     
-    title_lines.append(f"Top {min(TOP_N, len(top_satellites))} Satellites by Cumulative Data Loss")
+    title_lines.append(f"Cumulative Data Loss Over Time (All Satellites Per Policy)")
     
     title = '\n'.join(title_lines)
     fig.suptitle(title, fontsize=16, fontweight='bold')
     
     for i, policy in enumerate(POLICIES):
-        print(f"  Processing {policy} policy ({i+1}/{len(POLICIES)})...")
         ax = axes[i // 2, i % 2]
         
-        total_loss = 0
+        # FIX: Calculate total from ALL satellites, not just top 15
+        total_data = 0
+        for sat_id in all_totals:
+            sat_total = all_totals.get(sat_id, {}).get(policy, 0)
+            total_data += sat_total
+        
         legend_data = []
         
-        # Generate all 50 satellite IDs in the format that matches the data ('60518000', etc.)
-        all_50_satellites = [f"60518{i:03d}" for i in range(50)]
+        # Generate all 50 satellite IDs in the format that matches the data ('60518000-0', etc.)
+        all_50_satellites = [f"60518{i:03d}-0" for i in range(50)]
         
         # Use colors that cycle through the palette for all 50 satellites
-        colors = plt.cm.tab20(np.linspace(0, 1, 20))
+        policy_colors = plt.cm.tab20(np.linspace(0, 1, 20))
         extra_colors = plt.cm.Set3(np.linspace(0, 1, 20))
         extended_colors = plt.cm.Dark2(np.linspace(0, 1, 10))
-        all_colors = list(colors) + list(extra_colors) + list(extended_colors)
+        all_colors = list(policy_colors) + list(extra_colors) + list(extended_colors)
         
         for j, sat_id in enumerate(all_50_satellites):
-            sat_num = sat_id  # sat_id is already just the number (60518000, 60518001, etc.)
+            sat_num = sat_id.split("-")[0]  # Extract the number part (60518000, 60518001, etc.)
             sat_total = all_totals.get(sat_id, {}).get(policy, 0)
-            total_loss += sat_total
             color = all_colors[j % len(all_colors)]
             
-            loss_df = load_loss_data(policy, sat_id)
-            if loss_df is None or len(loss_df) == 0 or sat_total == 0:
-                # No loss data or no actual loss - use greyed line at zero
+            loss_df = load_loss_data(strategy_folder, policy, sat_id)
+            
+            if loss_df is None or sat_total == 0:
+                # No loss data file found or no data loss - use greyed line at zero
                 line = ax.axhline(0, color='lightgray', alpha=0.3, linestyle='--', linewidth=0.5)
                 legend_data.append((sat_total, line, f'{sat_id} (0MB)', True))  # True = greyed
             else:
                 # Loss data exists - use normal colored line
-                line = ax.plot(loss_df['hours'], loss_df['loss_mb'], 
-                       color=color, linewidth=2, alpha=0.8, linestyle='solid')[0]
+                line = ax.plot(loss_df['hours'], loss_df['cumulative_loss_mb'], 
+                       color=color, linewidth=1.5, alpha=0.8, linestyle='solid')[0]
                 legend_data.append((sat_total, line, f'{sat_id} ({sat_total:.0f}MB)', False))  # False = normal
         
         # Add orbital passes
         for start, end in passes:
             ax.axvspan(start, end, alpha=0.1, color='green')
         
-        # Sort legend: active satellites first (by loss amount, highest first), then greyed satellites by number
+        # Sort legend: active satellites first (by data amount, highest first), then greyed satellites by number
         active_legends = [(data, line, label) for data, line, label, is_grey in legend_data if not is_grey]
         greyed_legends = [(data, line, label) for data, line, label, is_grey in legend_data if is_grey]
         
-        # Sort active by loss amount (descending), greyed by satellite number (ascending)
+        # Sort active by data amount (descending), greyed by satellite number (ascending)
         active_legends.sort(key=lambda x: x[0], reverse=True)
         greyed_legends.sort(key=lambda x: x[2])  # Sort by label (contains sat number)
         
@@ -341,56 +347,56 @@ def create_plot():
         labels = [item[2] for item in sorted_legends]
         
         ax.set_xlabel('Time (hours)')
-        ax.set_ylabel('Cumulative Data Loss (MB)')
-        ax.set_title(f'{policy.upper()}\nTotal Loss: {total_loss:.0f} MB')
+        ax.set_ylabel('Data Loss (MB)')
+        ax.set_title(f'{policy.upper()} Scheduling\nTotal Downloaded: {total_data:.0f} MB', fontweight='bold')
         ax.grid(True, alpha=0.3)
         ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
-        
-        # Set y-axis to start at 0
-        ax.set_ylim(bottom=0)
     
-    # Save plot - use absolute paths for output directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = SCRIPT_DIR / f"loss_analysis_{timestamp}"
-    output_dir.mkdir(exist_ok=True)
+    # Save plot in the constellation analysis folder with strategy-specific naming
+    output_filename = f"loss_plot_{strategy_name}_strategy.png"
+    output_path = constellation_analysis_folder / output_filename
     
     plt.tight_layout()
-    plt.savefig(output_dir / "loss_comparison.png", dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     
-    # Create log archive
-    create_log_archive(output_dir)
-    
-    print(f"Analysis complete! Generated plot with {len(passes)} orbital passes -> {output_dir}/loss_comparison.png")
-    print(f"Found {len(top_satellites)} satellites with data loss across {len(POLICIES)} policies")
-
-def create_log_archive(output_dir):
-    """Create a zip archive of all simulation logs"""
-    archive_path = output_dir / "simulation_logs.zip"
-    
-    with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for policy in POLICIES:
-            policy_dir = LOGS_DIR / policy
-            if policy_dir.exists():
-                for log_file in policy_dir.glob("*.csv"):
-                    # Add file to zip with policy folder structure
-                    arcname = f"{policy}/{log_file.name}"
-                    zipf.write(log_file, arcname)
-    
-    print(f"Created log archive: {archive_path}")
-    return archive_path
+    print(f"Generated {strategy_name} buffer plot with {len(passes)} orbital passes -> {output_path}")
+    return output_path
 
 def main():
     """Main function"""
     print("Multi-Satellite Data Loss Analysis")
     
-    policy_dirs = get_policy_dirs()
-    if not policy_dirs:
-        print("No simulation logs found!")
-        print("Please run simulations first using the scripts in the scripts/ directory.")
+    # Extract constellation analysis data
+    constellation_analysis_folder = extract_constellation_data()
+    if not constellation_analysis_folder:
+        print("No constellation analysis data found!")
+        print("Please run constellation analysis first.")
         return
     
-    create_plot()
+    print(f"Processing constellation analysis folder: {constellation_analysis_folder.name}")
+    
+    # Process each strategy
+    generated_plots = []
+    for strategy in STRATEGIES:
+        strategy_folder = constellation_analysis_folder / strategy
+        if strategy_folder.exists():
+            print(f"\nProcessing {strategy} strategy...")
+            try:
+                output_path = create_plot(strategy_folder, strategy, constellation_analysis_folder)
+                if output_path:
+                    generated_plots.append(output_path)
+            except Exception as e:
+                print(f"Error processing {strategy} strategy: {e}")
+        else:
+            print(f"Strategy folder not found: {strategy}")
+    
+    if generated_plots:
+        print(f"\nData Loss analysis complete! Generated {len(generated_plots)} plots:")
+        for plot_path in generated_plots:
+            print(f"  {plot_path}")
+    else:
+        print("No plots were generated.")
 
 if __name__ == "__main__":
     main()
