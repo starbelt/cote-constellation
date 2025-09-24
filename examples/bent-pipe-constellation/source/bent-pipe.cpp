@@ -40,6 +40,7 @@
 
 #include "PolicyFactory.hpp" // Scheduling policies
 #include "SpacingFactory.hpp" // Spacing strategies
+#include "CloseOrbitSpacedStrategy.hpp" // For cluster initialization
 
 int main(int argc, char** argv) {
   // Set up variables
@@ -305,6 +306,11 @@ int main(int argc, char** argv) {
   // Create scheduling policy and spacing strategy
   std::unique_ptr<SchedulingPolicy> policy = PolicyFactory::createPolicy(policyStr);
   std::unique_ptr<SpacingStrategy> spacingStrategy = SpacingFactory::createStrategy(spacingStr);
+  
+  // Initialize orbit-spaced clusters if using CloseOrbitSpacedStrategy
+  if (auto* cs = dynamic_cast<CloseOrbitSpacedStrategy*>(spacingStrategy.get())) {
+    cs->initialize(satellites);
+  }
   
   // Simulation loop
   uint64_t stepCount = 0;

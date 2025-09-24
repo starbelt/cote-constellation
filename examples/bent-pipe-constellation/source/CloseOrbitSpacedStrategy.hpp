@@ -3,11 +3,51 @@
 
 #include "SpacingStrategy.hpp"
 #include <utilities.hpp>
+#include <cmath>
+#include <algorithm>
+#include <iostream>
+#include <iomanip>
 
 class CloseOrbitSpacedStrategy : public SpacingStrategy {
+private:
+    // Clustering parameters with sane defaults
+    int clusterSize = 5;              // satellites per cluster
+    double intraDtSec = 0.0;          // close-spaced inside cluster
+    double interDtSec = 540.0;        // inter-cluster spacing (~90min/10 for 50 sats)
+    bool rephased = false;            // one-time initialization flag
+
+    // Helper function to advance time by seconds
+    static inline void advanceBySeconds(cote::DateTime& t, double dt) {
+        long whole = static_cast<long>(std::floor(dt));
+        long ns = static_cast<long>(std::llround((dt - whole) * 1e9));
+        t.update(static_cast<uint8_t>(whole), static_cast<uint32_t>(ns));
+    }
+
 public:
     CloseOrbitSpacedStrategy() = default;
     ~CloseOrbitSpacedStrategy() = default;
+
+    // One-time re-phasing to create orbit-spaced clusters
+    void initialize(std::vector<cote::Satellite>& sats) {
+        if (rephased) return;
+        const int N = static_cast<int>(sats.size());
+        if (N <= 1 || clusterSize <= 1) { 
+            rephased = true; 
+            return; 
+        }
+
+        // Re-phase satellites into clusters
+        for (int i = 1; i < N; ++i) {
+            bool boundary = (i % clusterSize) == 0;
+            double dt = boundary ? interDtSec : intraDtSec;
+
+            auto t = sats[i-1].getLocalTime(); // get previous satellite's time
+            advanceBySeconds(t, dt);           // advance by appropriate delta
+            sats[i].setLocalTime(t);           // set new time
+        }
+
+        rephased = true;
+    }
 
     bool shouldTriggerObservation(
         const std::array<double,3>& currPosn,
