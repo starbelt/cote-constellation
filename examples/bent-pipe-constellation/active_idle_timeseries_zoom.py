@@ -303,7 +303,16 @@ def test_single_strategy(strategy="close-spaced", policy="sticky", start_time_st
                 ax.plot(sat_data['hours'], y_line, 
                        color=sat_color, linewidth=2, label=f'Sat {sat_id}', alpha=0.8)
         
-        ax.set_title(f'{strategy} - {policy}', fontsize=14, fontweight='bold')
+        # Create title with time range information if specified
+        if start_time_str and duration_seconds:
+            end_time = datetime.strptime(start_time_str, '%H:%M:%S') + timedelta(seconds=duration_seconds)
+            title = f'{strategy} - {policy} ({start_time_str} plus {duration_seconds} seconds)'
+        elif start_time_str:
+            title = f'{strategy} - {policy} (from {start_time_str} onwards)'
+        else:
+            title = f'{strategy} - {policy} (first 1000 rows)'
+        
+        ax.set_title(title, fontsize=14, fontweight='bold')
         ax.set_ylabel('Activity')
         ax.grid(True, alpha=0.3)
         

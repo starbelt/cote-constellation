@@ -219,7 +219,7 @@ def create_strategy_chart_optimized(strategy, output_dir, archive_base_path=None
     
     # Create 4 vertically stacked subplots - made even larger for better visibility
     fig, axes = plt.subplots(4, 1, figsize=(28, 22))  # Increased from (24, 18)
-    fig.suptitle(f'{strategy.replace("-", " ").title()} Strategy - All Policies\nCommunication Pattern Analysis', 
+    fig.suptitle(f'{strategy.replace("-", " ").title()} Strategy - All Policies', 
                  fontsize=20, fontweight='bold')  # Larger title font
     
     # Enhanced color scheme with more distinct, high-contrast colors for satellites
