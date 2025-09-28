@@ -59,12 +59,53 @@ def extract_constellation_data(folder_path=None):
         print(f"📁 Using latest constellation analysis folder: {latest_folder.name}")
         return latest_folder
 
-def read_config():
-    """Read simulation configuration"""
+def read_config(strategy_folder=None):
+    """Read simulation configuration from zip file or fall back to current config files"""
     config = {}
     
-    # Sensor config - use absolute path
-    sensor_file = SCRIPT_DIR / "configuration/sensor.dat"
+    # First try to read from configuration files in the strategy's simulation_logs.zip
+    if strategy_folder:
+        simulation_logs_zip = strategy_folder / "simulation_logs.zip"
+        if simulation_logs_zip.exists():
+            try:
+                with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+                    # Try to read sensor.dat from the zip
+                    if 'configuration/sensor.dat' in zipf.namelist():
+                        with zipf.open('configuration/sensor.dat') as file:
+                            lines = file.read().decode('utf-8').strip().split('\n')
+                            if len(lines) >= 2:
+                                header = lines[0].split(',')
+                                values = lines[1].split(',')
+                                for i, key in enumerate(header):
+                                    if i < len(values) and key == 'bits-per-sense':
+                                        bits_per_sense = int(values[i])
+                                        config['mb_per_sense'] = bits_per_sense / (8 * 1024 * 1024)
+                    
+                    # Try to read constellation.dat from the zip
+                    if 'configuration/constellation.dat' in zipf.namelist():
+                        with zipf.open('configuration/constellation.dat') as file:
+                            lines = file.read().decode('utf-8').strip().split('\n')
+                            if len(lines) >= 2:
+                                header = lines[0].split(',')
+                                values = lines[1].split(',')
+                                for i, key in enumerate(header):
+                                    if i < len(values):
+                                        if key == 'count':
+                                            config['satellite_count'] = int(values[i])
+                                        elif key == 'second':
+                                            config['frame_spacing'] = float(values[i]) + float(values[i+1]) / 1e9 if i+1 < len(values) else float(values[i])
+                    
+                    if config:
+                        print(f"� Read configuration from simulation zip: {simulation_logs_zip}")
+                        return config
+            except Exception as e:
+                print(f"⚠️  Could not read configuration from zip: {e}")
+    
+    # Fallback to reading current configuration files
+    config_dir = SCRIPT_DIR / "configuration"
+    
+    # Sensor config
+    sensor_file = config_dir / "sensor.dat"
     if sensor_file.exists():
         with open(sensor_file, 'r') as f:
             lines = f.readlines()
@@ -76,7 +117,7 @@ def read_config():
                         config['mb_per_sense'] = int(values[i]) / (8 * 1024 * 1024)
     
     # Constellation config
-    constellation_file = SCRIPT_DIR / "configuration/constellation.dat"
+    constellation_file = config_dir / "constellation.dat"
     if constellation_file.exists():
         with open(constellation_file, 'r') as f:
             lines = f.readlines()
@@ -91,6 +132,7 @@ def read_config():
                             # Frame spacing in seconds
                             config['frame_spacing'] = float(values[i]) + float(values[i+1]) / 1e9 if i+1 < len(values) else float(values[i])
     
+    print(f"📄 Using fallback configuration from {config_dir}")
     return config
 
 def get_policy_dirs(strategy_folder):
@@ -269,7 +311,7 @@ def get_orbital_passes(strategy_folder):
 
 def create_plot(strategy_folder, strategy_name, constellation_analysis_folder):
     """Create buffer comparison plot for a specific strategy"""
-    config = read_config()
+    config = read_config(strategy_folder)
     top_satellites, all_totals = get_top_satellites(strategy_folder)
     passes = get_orbital_passes(strategy_folder)
     

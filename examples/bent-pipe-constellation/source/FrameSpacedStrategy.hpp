@@ -5,10 +5,6 @@
 #include <utilities.hpp>
 
 class FrameSpacedStrategy : public SpacingStrategy {
-private:
-    mutable size_t frameCount = 0;  // Track frame count
-    mutable size_t satelliteCount = 0;  // Cache satellite count
-
 public:
     FrameSpacedStrategy() = default;
     ~FrameSpacedStrategy() = default;
@@ -35,27 +31,15 @@ public:
         const cote::DateTime& dateTime,
         cote::Log& log
     ) override {
-        // Cache satellite count for use in updateFrameState
-        satelliteCount = satellites.size();
+        // Consistent triggering logic: all satellites trigger simultaneously
+        log.evnt(cote::LogLevel::INFO, dateTime.toString(), "trigger-time");
         
-        // Original frame-spaced logic: increment frame count
-        frameCount++;
-        
-        // Only trigger all satellites when frameCount reaches constellation size
-        if(frameCount % satellites.size() == 0) {
-            frameCount = 0;  // Reset frame count
-            
-            log.evnt(cote::LogLevel::INFO, dateTime.toString(), "trigger-time");
-            
-            // Trigger ALL satellites at once (same as original frame-spaced.cpp)
-            for(size_t i = 0; i < satellites.size(); i++) {
-                satId2Sensor[satellites.at(i).getID()]->triggerSense();
-                satId2ThresholdKm[satellites.at(i).getID()] =
-                    threshCoeff * cote::util::calcAltitudeKm(satellites.at(i).getECIPosn());
-            }
+        // Trigger ALL satellites at once (consistent with other strategies)
+        for(size_t i = 0; i < satellites.size(); i++) {
+            satId2Sensor[satellites.at(i).getID()]->triggerSense();
+            satId2ThresholdKm[satellites.at(i).getID()] =
+                threshCoeff * cote::util::calcAltitudeKm(satellites.at(i).getECIPosn());
         }
-        // Note: If frameCount % satellites.size() != 0, we don't trigger any satellites
-        // This matches the original where only the lead satellite position is updated
     }
 
     void updateFrameState(
@@ -64,11 +48,8 @@ public:
         const cote::DateTime& dateTime,
         std::map<uint32_t, cote::Sensor*>& satId2Sensor
     ) override {
-        // Original frame-spaced logic: update lead satellite position when no sensing occurs
-        // This happens when frameCount % satelliteCount != 0
-        if(satelliteCount > 0 && frameCount % satelliteCount != 0) {
-            satId2Sensor[leadSatId]->setPrevSensePosnDateTime(currPosn, dateTime);
-        }
+        // Frame-spaced strategy now uses consistent triggering
+        // No special frame state management needed
     }
 
     std::string getStrategyName() const override {

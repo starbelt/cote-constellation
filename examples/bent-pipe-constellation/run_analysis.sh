@@ -65,6 +65,10 @@ for spacing in "${SPACING_STRATEGIES[@]}"; do
     rm -rf "$temp_spacing_dir"
     mkdir -p "$temp_spacing_dir"
     
+    # Copy configuration files to temp directory so they're included in simulation_logs.zip
+    mkdir -p "$temp_spacing_dir/configuration"
+    cp configuration/*.dat "$temp_spacing_dir/configuration/" 2>/dev/null || true
+    
     for policy in "${POLICIES[@]}"; do
         echo ""
         echo "🎯 Running $spacing with $(echo $policy | tr '[:lower:]' '[:upper:]') policy..."
@@ -150,15 +154,14 @@ CONSTELLATION_CONFIG="configuration/constellation.dat"
 if [ -f "$SENSOR_CONFIG" ]; then
     SENSOR_LINE=$(grep -v "^bits-per-sense" "$SENSOR_CONFIG" | head -1)
     IFS=',' read -ra SENSOR_PARAMS <<< "$SENSOR_LINE"
-    FRAME_RATE="${SENSOR_PARAMS[0]}"
-    IMAGE_WIDTH="${SENSOR_PARAMS[1]}"
-    IMAGE_HEIGHT="${SENSOR_PARAMS[2]}"
-    BITS_PER_PIXEL="${SENSOR_PARAMS[3]}"
+    BITS_PER_SENSE="${SENSOR_PARAMS[0]}"
+    PIXEL_COUNT="${SENSOR_PARAMS[1]}"
+    PIXEL_SIZE_M="${SENSOR_PARAMS[2]}"
+    FOCAL_LENGTH_M="${SENSOR_PARAMS[3]}"
     BUFFER_CAP="${SENSOR_PARAMS[4]}"
     
-    # Calculate image size
-    IMAGE_SIZE_BITS=$((IMAGE_WIDTH * IMAGE_HEIGHT * BITS_PER_PIXEL))
-    IMAGE_SIZE_MB=$(echo "scale=2; $IMAGE_SIZE_BITS / 8 / 1024 / 1024" | bc -l)
+    # Calculate image size from bits-per-sense
+    IMAGE_SIZE_MB=$(echo "scale=3; $BITS_PER_SENSE / 8 / 1024 / 1024" | bc -l)
 fi
 
 # Extract constellation parameters
@@ -168,24 +171,49 @@ if [ -f "$CONSTELLATION_CONFIG" ]; then
     SAT_COUNT="${CONSTELLATION_PARAMS[0]}"
 fi
 
+# Read additional configuration for comprehensive stats
+NUM_STEPS_CONFIG="configuration/num-steps.dat"
+TIME_STEP_CONFIG="configuration/time-step.dat"
+
+# Extract number of simulation steps
+if [ -f "$NUM_STEPS_CONFIG" ]; then
+    NUM_STEPS_LINE=$(grep -v "^steps" "$NUM_STEPS_CONFIG" | head -1)
+    NUM_STEPS="$NUM_STEPS_LINE"
+fi
+
+# Extract time step (assuming 1 second per step as default)
+TIME_STEP_SECONDS=1
+if [ -f "$TIME_STEP_CONFIG" ]; then
+    TIME_STEP_LINE=$(grep -v "^hour" "$TIME_STEP_CONFIG" | head -1)
+    IFS=',' read -ra TIME_PARAMS <<< "$TIME_STEP_LINE"
+    # Convert to seconds: hour*3600 + minute*60 + second + nanosecond/1e9
+    HOURS="${TIME_PARAMS[0]}"
+    MINUTES="${TIME_PARAMS[1]}"
+    SECONDS="${TIME_PARAMS[2]}"
+    NANOSECONDS="${TIME_PARAMS[3]}"
+    TIME_STEP_SECONDS=$(echo "scale=3; $HOURS * 3600 + $MINUTES * 60 + $SECONDS + $NANOSECONDS / 1000000000" | bc -l)
+fi
+
+# Calculate total simulation duration
+if [ -n "$NUM_STEPS" ] && [ -n "$TIME_STEP_SECONDS" ]; then
+    TOTAL_DURATION_SEC=$(echo "scale=1; $NUM_STEPS * $TIME_STEP_SECONDS" | bc -l)
+    TOTAL_DURATION_HOURS=$(echo "scale=2; $TOTAL_DURATION_SEC / 3600" | bc -l)
+fi
+
 # Create simple summary
 cat > "$SUMMARY_FILE" << EOF
-Simulation Summary - $(date '+%Y-%m-%d %H:%M:%S')
+Simulation Configuration Statistics
+===================================
 
-1) Max Buffer: ${BUFFER_CAP} MB
-2) Picture Size: ${IMAGE_SIZE_MB} MB (${IMAGE_WIDTH}x${IMAGE_HEIGHT}, ${BITS_PER_PIXEL} bits/pixel)
-3) Frame Rate: ${FRAME_RATE} seconds per image
-4) Sim Steps: 1 second = 1 simulation step
-5) Satellite Count: ${SAT_COUNT} satellites
-
-Spacing Strategies:
-- close-spaced: Tightly clustered satellites
-- close-orbit-spaced: Hybrid clustering approach
-- frame-spaced: Frame timing synchronized spacing  
-- orbit-spaced: Evenly distributed across orbit
-
-Link Policies: sticky, fifo, roundrobin, random
-Total Combinations: 16 (4 strategies × 4 policies)
+Image Size: ${IMAGE_SIZE_MB} MB
+Max Buffer: ${BUFFER_CAP} MB  
+Satellite Count: ${SAT_COUNT}
+Total Steps: ${NUM_STEPS}
+Time Step: ${TIME_STEP_SECONDS}s
+Total Duration: ${TOTAL_DURATION_HOURS}h (${TOTAL_DURATION_SEC}s)
+Strategies: 4 (close-spaced, close-orbit-spaced, frame-spaced, orbit-spaced)
+Policies: 4 (sticky, fifo, roundrobin, random)
+Total Combinations: 16
 EOF
 
 echo "   ✅ Created simulation_summary.txt"
