@@ -58,21 +58,20 @@ public:
             visibleSatIds.insert(sat->getID());
         }
         
+        // Create set of current queue IDs for efficient duplicate checking
+        std::set<uint32_t> queuedSatIds;
+        for(const auto& queuedId : satQueue) {
+            queuedSatIds.insert(queuedId);
+        }
+        
         // Add new visible satellites to back of queue
         for(const auto* sat : visibleSats) {
             uint32_t satId = sat->getID();
             
-            // Check if already in queue (O(n) but queues are small)
-            bool alreadyInQueue = false;
-            for(const auto& queuedId : satQueue) {
-                if(queuedId == satId) {
-                    alreadyInQueue = true;
-                    break;
-                }
-            }
-            
-            if(!alreadyInQueue) {
+            // Only add if not already in queue (O(1) lookup)
+            if(queuedSatIds.find(satId) == queuedSatIds.end()) {
                 satQueue.push_back(satId);  // Add to back (FIFO order)
+                queuedSatIds.insert(satId); // Track for efficiency
             }
         }
         
@@ -83,6 +82,11 @@ public:
             
             // Skip if satellite is no longer visible
             if(visibleSatIds.find(frontSatId) == visibleSatIds.end()) {
+                continue;  // Remove from queue and try next
+            }
+            
+            // Skip if satellite is occupied by another ground station
+            if(satId2Occupied.count(frontSatId) && satId2Occupied.at(frontSatId)) {
                 continue;  // Remove from queue and try next
             }
             
