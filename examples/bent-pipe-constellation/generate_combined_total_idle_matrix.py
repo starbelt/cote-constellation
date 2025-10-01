@@ -12,8 +12,14 @@ import argparse
 import os
 import re
 
+def steps_to_time_string(steps):
+    """Convert timesteps (seconds) to hh:mm:ss format"""
+    hours = steps // 3600
+    minutes = (steps % 3600) // 60
+    seconds = steps % 60
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
 def read_config_from_zip(zip_path):
-    """Read configuration from simulation_logs.zip"""
     config = {}
     try:
         with zipfile.ZipFile(zip_path, 'r') as zipf:
@@ -43,8 +49,24 @@ def read_config_from_zip(zip_path):
     
     return config
 
-def calculate_total_idle_time_for_policy(policy_dir):
+def steps_to_time_string(steps):
+    """Convert timesteps to hh:mm:ss format.
+    
+    Args:
+        steps: Number of simulation timesteps
+        
+    Returns:
+        String in hh:mm:ss format
+    """
+    hours = steps // 3600
+    minutes = (steps % 3600) // 60
+    seconds = steps % 60
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+def calculate_total_idle_time_for_policy(policy_folder):
     """Calculate total idle time = policy idle + ground station idle"""
+    
+    policy_dir = Path(policy_folder)
     
     try:
         # Load tx-rx connection data
@@ -173,11 +195,11 @@ def calculate_total_idle_for_strategy(strategy_folder):
                 }
                 
                 print(f"     Policy: {policy}")
-                print(f"       Total Simulation Steps: {total_simulation}")
-                print(f"       Policy Idle: {policy_idle} steps ({policy_idle/total_simulation*100:.1f}%)")
-                print(f"       GS Idle: {gs_idle} steps ({gs_idle/total_simulation*100:.1f}%)")
-                print(f"       Total Idle: {total_idle} steps ({total_idle_percentage:.1f}%)")
-                print(f"       Active (not idle): {total_simulation - total_idle} steps ({(total_simulation - total_idle)/total_simulation*100:.1f}%)")
+                print(f"       Total Simulation Time: {steps_to_time_string(total_simulation)} ({total_simulation} steps)")
+                print(f"       Policy Idle: {steps_to_time_string(policy_idle)} ({policy_idle/total_simulation*100:.1f}%)")
+                print(f"       GS Idle: {steps_to_time_string(gs_idle)} ({gs_idle/total_simulation*100:.1f}%)")
+                print(f"       Total Idle: {steps_to_time_string(total_idle)} ({total_idle_percentage:.1f}%)")
+                print(f"       Active (not idle): {steps_to_time_string(total_simulation - total_idle)} ({(total_simulation - total_idle)/total_simulation*100:.1f}%)")
             else:
                 results[policy] = 0
                 idle_data[policy] = {'policy_idle': 0, 'gs_idle': 0, 'total_idle': 0, 'total_simulation': 0}
@@ -241,11 +263,6 @@ def generate_combined_total_idle_matrix(base_folder):
             
         image_sizes.append(img_size)
         print(f"\n🔄 Processing image size {img_size:.3f} MB...")
-        
-        # STOP AFTER FIRST FOLDER FOR DETAILED ANALYSIS
-        if len(image_sizes) > 1:
-            print("   ... (stopping after first folder for detailed analysis)")
-            break
         
         idle_data = {}
         detailed_data = {}
@@ -337,7 +354,7 @@ def generate_combined_total_idle_matrix(base_folder):
     cbar.set_label('Total Idle Time (%)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
     cbar.ax.tick_params(labelsize=10)
     
-    # Add text annotations with values - show total idle timesteps and percentage
+    # Add text annotations with values - show total idle time and percentage
     for policy_idx, policy in enumerate(policies):
         for img_idx, img_size in enumerate(image_sizes):
             row_idx = policy_idx * rows_per_policy + img_idx
@@ -346,17 +363,15 @@ def generate_combined_total_idle_matrix(base_folder):
                 total_idle_steps = total_idle_steps_matrix[row_idx, strategy_idx]
                 total_idle_pct = total_idle_matrix[row_idx, strategy_idx]
                 
-                # Format text showing total idle timesteps and percentage
-                if total_idle_steps >= 1000:  # Use K for large values
-                    value_text = f'{total_idle_steps/1000:.1f}K steps\n{total_idle_pct:.1f}%'
-                else:
-                    value_text = f'{total_idle_steps:.0f} steps\n{total_idle_pct:.1f}%'
+                # Format text showing total idle time and percentage
+                idle_time = steps_to_time_string(int(total_idle_steps))
+                value_text = f'{idle_time}\n{total_idle_pct:.1f}%'
                     
                 text = ax.text(strategy_idx, row_idx, value_text, ha="center", va="center", 
                              color='black', fontweight='bold', fontsize=9)
     
     # Create comprehensive title
-    title = f'Total Idle Time (Policy Idle + Ground Station Idle): All Image Sizes\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\n{better_text}'
+    title = f'Total Idle Time (Policy Idle + Ground Station Idle): All Image Sizes\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\nTime format: hh:mm:ss | {better_text}'
     
     # Titles and labels
     ax.set_title(title, fontsize=16, fontweight='bold', pad=25)
@@ -409,7 +424,7 @@ def generate_combined_total_idle_matrix(base_folder):
     
     # Print summary showing worst total idle performance for each policy across all image sizes
     print(f"\n=== COMBINED TOTAL IDLE TIME SUMMARY ===")
-    print(f"{'Policy':<15} {'Image Size':<12} {'Worst Strategy':<20} {'Total Idle Steps':<15} {'Total Idle %':<12}")
+    print(f"{'Policy':<15} {'Image Size':<12} {'Worst Strategy':<20} {'Total Idle Time':<15} {'Total Idle %':<12}")
     print("-" * 90)
     
     for policy_idx, policy in enumerate(policies):
@@ -420,8 +435,9 @@ def generate_combined_total_idle_matrix(base_folder):
             worst_strategy = strategies[worst_strategy_idx]
             worst_idle = row_idles[worst_strategy_idx]
             worst_steps = total_idle_steps_matrix[row_idx, worst_strategy_idx]
+            worst_time = steps_to_time_string(int(worst_steps))
             
-            print(f"{policy.upper():<15} {img_size:>7.3f} MB   {worst_strategy:<20} {worst_steps:>12.0f}     {worst_idle:>8.1f}%")
+            print(f"{policy.upper():<15} {img_size:>7.3f} MB   {worst_strategy:<20} {worst_time:<15} {worst_idle:>8.1f}%")
 
 def main():
     parser = argparse.ArgumentParser(description='Generate combined total idle time matrix (policy + GS idle) across image sizes')

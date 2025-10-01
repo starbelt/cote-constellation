@@ -12,6 +12,13 @@ import argparse
 import os
 import re
 
+def steps_to_time_string(steps):
+    """Convert timesteps (seconds) to hh:mm:ss format"""
+    hours = steps // 3600
+    minutes = (steps % 3600) // 60
+    seconds = steps % 60
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
 def read_config_from_zip(zip_path):
     """Read configuration from simulation_logs.zip"""
     config = {}
@@ -314,7 +321,7 @@ def generate_combined_idle_matrix(base_folder):
     cbar.set_label('Idle Time (%)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
     cbar.ax.tick_params(labelsize=10)
     
-    # Add text annotations with values - show idle timesteps and percentage
+    # Add text annotations with values - show idle time and percentage
     for policy_idx, policy in enumerate(policies):
         for img_idx, img_size in enumerate(image_sizes):
             row_idx = policy_idx * rows_per_policy + img_idx
@@ -323,17 +330,15 @@ def generate_combined_idle_matrix(base_folder):
                 idle_timesteps = timestep_matrix[row_idx, strategy_idx]
                 idle_pct = idle_matrix[row_idx, strategy_idx]
                 
-                # Format text showing idle timesteps and percentage
-                if idle_timesteps >= 1000:  # Use K for large values
-                    value_text = f'{idle_timesteps/1000:.1f}K steps\n{idle_pct:.1f}%'
-                else:
-                    value_text = f'{idle_timesteps:.0f} steps\n{idle_pct:.1f}%'
+                # Format text showing idle time and percentage
+                idle_time = steps_to_time_string(int(idle_timesteps))
+                value_text = f'{idle_time}\n{idle_pct:.1f}%'
                     
                 text = ax.text(strategy_idx, row_idx, value_text, ha="center", va="center", 
                              color='black', fontweight='bold', fontsize=9)
     
     # Create comprehensive title
-    title = f'Idle Time (Wasted Connection Time): All Image Sizes by Policy × Strategy\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\n{better_text}'
+    title = f'Idle Time (Wasted Connection Time): All Image Sizes\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\nTime format: hh:mm:ss | {better_text}'
     
     # Titles and labels
     ax.set_title(title, fontsize=16, fontweight='bold', pad=25)
