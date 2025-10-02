@@ -309,12 +309,62 @@ def generate_combined_total_idle_matrix(base_folder):
     # Create the plot with adjusted size for the larger matrix
     fig, ax = plt.subplots(figsize=(16, 14))
     
-    # Use Reds colormap (higher total idle time = worse = darker red)
-    cmap = 'Reds'
+    # Use a custom approach to handle the extreme difference between orbit-spaced (~2-4%) and others (~90%+)
     better_text = "Lower Values = Better Performance (Less Total Wasted Time)"
     
-    # Create the heatmap using imshow
-    im = ax.imshow(total_idle_matrix, cmap=cmap, aspect='auto')
+    # Get min/max values
+    min_value = np.min(total_idle_matrix)
+    max_value = np.max(total_idle_matrix)
+    
+    print(f"📊 Idle time range: {min_value:.1f}% to {max_value:.1f}%")
+    
+    # Create a custom colormap with discrete boundaries to handle the extreme range
+    from matplotlib.colors import BoundaryNorm
+    import matplotlib.colors as mcolors
+    
+    # Define boundaries that give good resolution across the full range
+    # Low range (orbit-spaced): 0-10% with fine granularity
+    # Mid range (larger orbit-spaced): 60-70% to bridge the gap
+    # High range (others): 85-100% with 1% increments for better differentiation where most data lives
+    boundaries = [0, 2, 4, 6, 8, 10, 60, 62, 64, 66, 68, 70, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100]
+    
+    # Create a red-only colormap with continuous gradient from light to dark
+    # Light colors for good performance (low idle), progressively darker for poor performance (high idle)
+    # Keep colors MUCH lighter in the 60-100% range since that's where most data clusters
+    colors = [
+        '#fff5f0',  # Very light pink/white (0-2%) - best performance
+        '#fee0d2',  # Light pink (2-4%)
+        "#fcd5c5",  # Light salmon (4-6%)
+        "#f7e0d9",  # Medium salmon (6-8%)
+        "#f6d4cc",  # Light red (8-10%)
+        "#f8cccc",  # Much lighter for 60-62% - keep it light!
+        "#fbbdbd",  # Light pink (62-64%)
+        "#f8b7b7",  # Much lighter for 85-86% - need to see differences here!
+        "#faa7a7",  # Light rose (64-66%)
+        "#fa9595",  # Medium light rose (66-68%)
+        "#fba4a4",  # Light pink (86-87%)
+        "#f58383",  # Medium rose (68-70%)
+        "#f67c7c",  # Light rose (87-88%)
+        "#f26c6c",  # Medium light rose (88-89%)
+        "#f65a5a",  # Medium rose (89-90%)
+        '#ff4d4d',  # Medium red (90-91%)
+        '#ff3333',  # Red (91-92%)
+        '#ff1a1a',  # Bright red (92-93%)
+        '#ff0000',  # Pure red (93-94%)
+        '#e60000',  # Slightly darker red (94-95%) 
+        '#cc0000',  # Darker (95-96%)
+        '#b30000',  # Even darker (96-97%)
+        "#A40101",  # Dark red (97-98%)
+        "#A10606",  # Very dark red (98-99%)
+        "#9E0909",  # Almost there (99-100%)
+        "#881F1F",  # Target color (100%) - worst performance
+        '#881F1F'   # Extra color to match boundary count
+    ]
+    cmap = mcolors.ListedColormap(colors)
+    norm = BoundaryNorm(boundaries, cmap.N)
+    
+    # Create the heatmap using imshow with custom normalization
+    im = ax.imshow(total_idle_matrix, cmap=cmap, aspect='auto', norm=norm)
     
     # Set ticks and labels - strategies on X, policies with image sizes on Y
     strategy_labels = [s.replace('-', '-').title() for s in strategies]
