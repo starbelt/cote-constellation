@@ -177,7 +177,7 @@ def generate_combined_loss_matrix(base_folder):
     
     print(f"\n📊 Buffer size: {buffer_size_mb:.0f} MB")
     
-    strategies = ["close-spaced", "frame-spaced", "polar-spaced", "orbit-spaced"]
+    strategies = ["close-spaced", "frame-spaced", "orbit-spaced", "close-orbit-spaced"]
     policies = ["sticky", "roundrobin", "fifo", "random"]
     
     # Create loss matrices: rows = policies × image_sizes, columns = strategies
