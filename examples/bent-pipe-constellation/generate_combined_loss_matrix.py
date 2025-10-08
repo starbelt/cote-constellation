@@ -146,10 +146,23 @@ def extract_image_size_from_folder(folder_name):
             return float(size_str) / 1000
     return 0.289  # fallback
 
-def generate_combined_loss_matrix(base_folder):
-    """Generate combined data loss matrix for all image sizes"""
+def extract_satellite_count_from_folder(folder_name):
+    """Extract satellite count from folder name like constellation_analysis_20251007_193320_28000_50"""
+    # New format: constellation_analysis_YYYYMMDD_HHMMSS_IMAGESIZE_SATCOUNT
+    # Extract the last number (satellite count)
+    match = re.search(r'_(\d+)$', folder_name)
+    if match:
+        return int(match.group(1))
+    return None  # If no satellite count found, return None (old format)
+
+def generate_combined_loss_matrix(base_folder, satellite_count=None):
+    """Generate combined data loss matrix for specific satellite count (image size comparison only)"""
     
     base_path = Path(base_folder)
+    
+    constellation_info = f" ({satellite_count} satellites)" if satellite_count else ""
+    print(f"=== Generating Combined Data Loss Matrix{constellation_info} ===")
+    print(f"📁 Base folder: {base_folder}")
     
     # Find all analysis folders
     analysis_folders = [f for f in base_path.iterdir() 
@@ -158,6 +171,29 @@ def generate_combined_loss_matrix(base_folder):
     if not analysis_folders:
         print("❌ No analysis folders found!")
         return
+    
+    # Filter by satellite count if specified
+    if satellite_count is not None:
+        filtered_folders = []
+        for folder in analysis_folders:
+            folder_sat_count = extract_satellite_count_from_folder(folder.name)
+            if folder_sat_count == satellite_count:
+                filtered_folders.append(folder)
+        
+        if not filtered_folders:
+            print(f"❌ No analysis folders found for {satellite_count} satellites")
+            print(f"Available satellite counts:")
+            sat_counts = set()
+            for folder in analysis_folders:
+                sat_count = extract_satellite_count_from_folder(folder.name)
+                if sat_count is not None:
+                    sat_counts.add(sat_count)
+            for sc in sorted(sat_counts):
+                print(f"  🛰️  {sc} satellites")
+            return
+        
+        analysis_folders = filtered_folders
+        print(f"🛰️  Filtering to {satellite_count} satellite constellation ({len(analysis_folders)} folders found)")
     
     # Sort folders and extract image sizes
     analysis_folders.sort()
@@ -287,7 +323,8 @@ def generate_combined_loss_matrix(base_folder):
                              color='black', fontweight='bold', fontsize=9)
     
     # Create comprehensive title
-    title = f'Data Loss Analysis: All Image Sizes (Buffer: {buffer_size_mb:.0f} MB)\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\n{better_text}'
+    constellation_title = f" ({satellite_count} Satellite Constellation)" if satellite_count else ""
+    title = f'Data Loss Analysis{constellation_title}: All Image Sizes (Buffer: {buffer_size_mb:.0f} MB)\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\n{better_text}'
     
     # Titles and labels
     ax.set_title(title, fontsize=16, fontweight='bold', pad=25)
@@ -310,8 +347,12 @@ def generate_combined_loss_matrix(base_folder):
     
     plt.tight_layout()
     
-    # Save the plot to parent directory (one level up)
-    output_path = base_path.parent / 'combined_loss_matrix.png'
+    # Save the plot with satellite count in filename
+    if satellite_count is not None:
+        output_filename = f'combined_loss_matrix_{satellite_count}sats.png'
+    else:
+        output_filename = 'combined_loss_matrix.png'
+    output_path = base_path.parent / output_filename
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     print(f"\n✅ Combined loss matrix saved: {output_path}")
@@ -326,24 +367,12 @@ def generate_combined_loss_matrix(base_folder):
     print(f"   🔹 Policies: {len(policies)} ({', '.join(policies)})")
 
 def main():
-    parser = argparse.ArgumentParser(description='Generate combined data loss matrix')
+    parser = argparse.ArgumentParser(description='Generate combined data loss matrix across image sizes for specific satellite count')
     parser.add_argument('base_folder', help='Base folder containing analysis results')
+    parser.add_argument('--sats', type=int, help='Satellite count to filter by (e.g., 1, 50, 100, 200)')
     args = parser.parse_args()
     
-    print("=== Generating Combined Data Loss Matrix ===")
-    print(f"📁 Base folder: {args.base_folder}")
-    
-    # Find analysis folders
-    base_path = Path(args.base_folder)
-    analysis_folders = [f for f in base_path.iterdir() 
-                       if f.is_dir() and f.name.startswith('constellation_analysis_')]
-    
-    print(f"Found {len(analysis_folders)} analysis folders:")
-    for folder in sorted(analysis_folders):
-        size = extract_image_size_from_folder(folder.name)
-        print(f"  📁 {folder.name} → {size:.3f} MB")
-    
-    generate_combined_loss_matrix(args.base_folder)
+    generate_combined_loss_matrix(args.base_folder, args.sats)
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate combined idle time matrix across all image sizes"""
+"""Generate combined idle time matrix across all image sizes and satellite counts"""
 
 import pandas as pd
 import numpy as np
@@ -51,7 +51,7 @@ def read_config_from_zip(zip_path):
     return config
 
 def calculate_idle_time_for_policy(policy_dir):
-    """Calculate total idle time using connection and buffer analysis"""
+    """Calculate total idle time using connection and buffer analysis (ORIGINAL LOGIC)"""
     total_idle_timesteps = 0
     total_connected_timesteps = 0
     
@@ -72,9 +72,6 @@ def calculate_idle_time_for_policy(policy_dir):
         tx_rx_df = tx_rx_df.iloc[:, :2]
         tx_rx_df.columns = ["timestamp", "satellite"]
         tx_rx_df["timestamp"] = pd.to_datetime(tx_rx_df["timestamp"])
-        
-        # Get global time reference
-        global_min_time = tx_rx_df["timestamp"].min()
         
         # Process each satellite's buffer data
         for buffer_file in buffer_files:
@@ -157,10 +154,10 @@ def calculate_idle_for_strategy(strategy_folder):
             policy_dir = temp_path / policy
             
             if policy_dir.exists():
-                # Calculate idle time using connection and buffer analysis
+                # Calculate idle time using connection and buffer analysis (ORIGINAL LOGIC)
                 total_idle, total_connected = calculate_idle_time_for_policy(policy_dir)
                 
-                # Calculate idle percentage
+                # Calculate idle percentage (ORIGINAL LOGIC)
                 if total_connected > 0:
                     idle_percentage = (total_idle / total_connected) * 100
                 else:
@@ -200,18 +197,23 @@ def extract_satellite_count_from_folder(folder_name):
     match = re.search(r'_(\d+)$', folder_name)
     if match:
         return int(match.group(1))
-    return None  # If no satellite count found, return None (old format)
+    return 1  # fallback
 
-def generate_combined_idle_matrix(base_folder, satellite_count=None):
-    """Generate combined idle time matrix for specific satellite count (image size comparison only)"""
+def extract_params_from_folder(folder_name):
+    """Extract both image size and satellite count from folder name"""
+    image_size = extract_image_size_from_folder(folder_name)
+    satellite_count = extract_satellite_count_from_folder(folder_name)
+    return image_size, satellite_count
+
+def generate_combined_idle_matrix_sats(base_folder):
+    """Generate combined 4D idle time matrix for all image sizes, satellite counts and strategies"""
     base_path = Path(base_folder)
     
     if not base_path.exists():
         print(f"❌ Base folder not found: {base_folder}")
         return
     
-    constellation_info = f" ({satellite_count} satellites)" if satellite_count else ""
-    print(f"=== Generating Combined Idle Time Matrix{constellation_info} ===")
+    print(f"=== Generating Combined 4D Idle Time Matrix ===")
     print(f"📁 Base folder: {base_folder}")
     
     # Find all analysis folders
@@ -222,108 +224,142 @@ def generate_combined_idle_matrix(base_folder, satellite_count=None):
         print(f"❌ No analysis folders found")
         return
     
-    # Filter by satellite count if specified
-    if satellite_count is not None:
-        filtered_folders = []
-        for folder in analysis_folders:
-            folder_sat_count = extract_satellite_count_from_folder(folder.name)
-            if folder_sat_count == satellite_count:
-                filtered_folders.append(folder)
-        
-        if not filtered_folders:
-            print(f"❌ No analysis folders found for {satellite_count} satellites")
-            print(f"Available satellite counts:")
-            sat_counts = set()
-            for folder in analysis_folders:
-                sat_count = extract_satellite_count_from_folder(folder.name)
-                if sat_count is not None:
-                    sat_counts.add(sat_count)
-            for sc in sorted(sat_counts):
-                print(f"  🛰️  {sc} satellites")
-            return
-        
-        analysis_folders = filtered_folders
-        print(f"🛰️  Filtering to {satellite_count} satellite constellation ({len(analysis_folders)} folders found)")
-    
-    # Sort by image size extracted from folder name
-    analysis_folders.sort(key=lambda x: extract_image_size_from_folder(x.name) or 0)
-    
-    print(f"Found {len(analysis_folders)} analysis folders:")
+    # Group folders by image size and satellite count
+    param_groups = {}
     for folder in analysis_folders:
-        img_size = extract_image_size_from_folder(folder.name)
-        print(f"  📁 {folder.name} → {img_size:.3f} MB")
+        img_size, sat_count = extract_params_from_folder(folder.name)
+        if img_size is not None and sat_count is not None:
+            if img_size not in param_groups:
+                param_groups[img_size] = {}
+            param_groups[img_size][sat_count] = folder
+    
+    # Sort parameters for consistent ordering
+    image_sizes = sorted(param_groups.keys())
+    satellite_counts = sorted(set(sc for img_data in param_groups.values() for sc in img_data.keys()))
+    
+    print(f"Found data for:")
+    print(f"  📷 Image sizes: {[f'{size:.3f} MB' for size in image_sizes]}")
+    print(f"  🛰️  Satellite counts: {satellite_counts}")
+    print(f"  📊 Total combinations: {len(image_sizes)} × {len(satellite_counts)} = {len(image_sizes) * len(satellite_counts)}")
     
     strategies = ["close-spaced", "frame-spaced", "orbit-spaced", "close-orbit-spaced"]
     policies = ["sticky", "roundrobin", "fifo", "random"]
     
-    # Calculate idle time for each image size and strategy
+    # Calculate idle data for each parameter combination
     all_idle_data = {}
     all_timestep_data = {}
-    image_sizes = []
     
-    for analysis_folder in analysis_folders:
-        img_size = extract_image_size_from_folder(analysis_folder.name)
-        if img_size is None:
-            continue
-            
-        image_sizes.append(img_size)
-        print(f"\n🔄 Processing image size {img_size:.3f} MB...")
+    for img_size in image_sizes:
+        all_idle_data[img_size] = {}
+        all_timestep_data[img_size] = {}
         
-        idle_data = {}
-        timestep_data = {}
-        
-        for strategy in strategies:
-            strategy_folder = analysis_folder / strategy
-            
-            if strategy_folder.exists():
-                idle_data[strategy], timestep_data[strategy] = calculate_idle_for_strategy(strategy_folder)
-                print(f"   ✅ {strategy}: Processed")
+        for sat_count in satellite_counts:
+            if sat_count in param_groups[img_size]:
+                analysis_folder = param_groups[img_size][sat_count]
+                print(f"\n🔄 Processing {img_size:.3f} MB, {sat_count} sats...")
+                
+                idle_data = {}
+                timestep_data = {}
+                
+                for strategy in strategies:
+                    strategy_folder = analysis_folder / strategy
+                    
+                    if strategy_folder.exists():
+                        idle_data[strategy], timestep_data[strategy] = calculate_idle_for_strategy(strategy_folder)
+                        print(f"   ✅ {strategy}: Processed")
+                    else:
+                        print(f"   ❌ {strategy}: Not found")
+                        idle_data[strategy] = {policy: 0 for policy in policies}
+                        timestep_data[strategy] = {policy: 0 for policy in policies}
+                
+                all_idle_data[img_size][sat_count] = idle_data
+                all_timestep_data[img_size][sat_count] = timestep_data
             else:
-                print(f"   ❌ {strategy}: Not found")
-                idle_data[strategy] = {policy: 0 for policy in policies}
-                timestep_data[strategy] = {policy: 0 for policy in policies}
-        
-        all_idle_data[img_size] = idle_data
-        all_timestep_data[img_size] = timestep_data
+                print(f"\n⚠️  Missing data for {img_size:.3f} MB, {sat_count} sats")
+                # Fill with zeros for missing combinations
+                all_idle_data[img_size][sat_count] = {
+                    strategy: {policy: 0 for policy in policies} 
+                    for strategy in strategies
+                }
+                all_timestep_data[img_size][sat_count] = {
+                    strategy: {policy: 0 for policy in policies} 
+                    for strategy in strategies
+                }
     
-    if not image_sizes:
-        print("❌ No valid analysis folders found")
+    if not image_sizes or not satellite_counts:
+        print("❌ No valid data found!")
         return
-    
-    # Create combined matrix (policies × strategies, with each cell showing all 4 image sizes)
-    # We'll use a larger matrix where each "cell" is actually 4 sub-cells vertically stacked
+
+    # Create 4D matrix: each "big cell" (policy×strategy) is subdivided into:
+    # - 4 rows (image sizes) × 4 columns (satellite counts) = 16 sub-cells
     rows_per_policy = len(image_sizes)  # 4 image sizes per policy
+    cols_per_strategy = len(satellite_counts)  # 4 satellite counts per strategy
     total_rows = len(policies) * rows_per_policy
-    
-    idle_matrix = np.zeros((total_rows, len(strategies)))
-    timestep_matrix = np.zeros((total_rows, len(strategies)))
-    
-    # Fill the matrix: each policy gets 4 rows (one per image size)
+    total_cols = len(strategies) * cols_per_strategy
+
+    idle_matrix = np.zeros((total_rows, total_cols))
+    timestep_matrix = np.zeros((total_rows, total_cols))
+
+    # Fill the matrix: each policy×strategy combination gets a 4×4 sub-matrix
     for policy_idx, policy in enumerate(policies):
         for img_idx, img_size in enumerate(image_sizes):
             row_idx = policy_idx * rows_per_policy + img_idx
             
             for strategy_idx, strategy in enumerate(strategies):
-                idle_percentage = all_idle_data[img_size][strategy][policy]
-                idle_timesteps = all_timestep_data[img_size][strategy][policy]
-                
-                idle_matrix[row_idx, strategy_idx] = idle_percentage
-                timestep_matrix[row_idx, strategy_idx] = idle_timesteps
-    
-    # Create the plot with adjusted size for the larger matrix
-    fig, ax = plt.subplots(figsize=(16, 14))
+                for sat_count_idx, sat_count in enumerate(satellite_counts):
+                    col_idx = strategy_idx * cols_per_strategy + sat_count_idx
+                    
+                    # Access the idle percentage from the 4D data structure
+                    if (img_size in all_idle_data and 
+                        sat_count in all_idle_data[img_size] and 
+                        strategy in all_idle_data[img_size][sat_count] and 
+                        policy in all_idle_data[img_size][sat_count][strategy]):
+                        
+                        idle_percentage = all_idle_data[img_size][sat_count][strategy][policy]
+                        timestep_count = all_timestep_data[img_size][sat_count][strategy][policy]
+                    else:
+                        idle_percentage = 0
+                        timestep_count = 0
+                    
+                    idle_matrix[row_idx, col_idx] = idle_percentage
+                    timestep_matrix[row_idx, col_idx] = timestep_count
+
+    # Create large figure for 4D matrix
+    fig, ax = plt.subplots(figsize=(24, 18))
     
     # Use Reds colormap (higher idle time = worse = darker red)
     cmap = 'Reds'
-    better_text = "Lower Values = Better Performance (Less Wasted Time)"
     
-    # Create the heatmap using imshow
+    # Create the heatmap
     im = ax.imshow(idle_matrix, cmap=cmap, aspect='auto')
     
-    # Set ticks and labels - strategies on X, policies with image sizes on Y
-    strategy_labels = [s.replace('-', '-').title() for s in strategies]
+    # Improved x-axis labels: Satellite counts on top, strategy names below (like y-axis structure)
+    x_positions = []
+    x_labels_top = []
+    x_labels_bottom = []
     
-    # Create Y-axis labels: Show both policy names and image sizes
+    for strategy_idx, strategy in enumerate(strategies):
+        for sat_count_idx, sat_count in enumerate(satellite_counts):
+            col_idx = strategy_idx * cols_per_strategy + sat_count_idx
+            x_positions.append(col_idx)
+            x_labels_top.append(str(sat_count))
+            # Only show strategy name for the first satellite count to avoid repetition
+            if sat_count_idx == 0:
+                x_labels_bottom.append(strategy.replace('-', '-').title())
+            else:
+                x_labels_bottom.append('')
+    
+    # Set main x-axis labels (satellite counts)
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(x_labels_top, fontsize=10, fontweight='bold')
+    
+    # Create secondary x-axis for strategy names
+    ax2 = ax.twiny()
+    ax2.set_xticks(x_positions)
+    ax2.set_xticklabels(x_labels_bottom, fontsize=12, fontweight='bold')
+    ax2.tick_params(axis='x', which='major', pad=15)
+    
+    # Y-axis labels: Policies with image sizes
     all_y_positions = []
     all_y_labels = []
     
@@ -332,29 +368,35 @@ def generate_combined_idle_matrix(base_folder, satellite_count=None):
             row_idx = policy_idx * rows_per_policy + img_idx
             all_y_positions.append(row_idx)
             
-            # Format image size for clean display (e.g., 0.028 -> .028, 28.990 -> 29)
+            # Format size label
             if img_size < 1:
                 size_label = f".{int(img_size * 1000):03d}"  # .028, .289
             else:
                 size_label = f"{img_size:.0f}"  # 3, 29
             
-            # For the first row of each policy, show policy name to the left of image size
+            # For the first row of each policy, show policy name
             if img_idx == 0:
-                label = f"{policy.upper()}  {size_label}"  # Extra space for separation
+                label = f"{policy.upper()}  {size_label}"
             else:
-                label = f"      {size_label}"  # Indent image sizes to align under policy
+                label = f"      {size_label}"  # Indent image sizes
             
             all_y_labels.append(label)
     
-    ax.set_xticks(np.arange(len(strategies)))
     ax.set_yticks(all_y_positions)
-    ax.set_xticklabels(strategy_labels, fontsize=12, fontweight='bold')
     ax.set_yticklabels(all_y_labels, fontsize=10, fontweight='bold')
     
+    # Add separator lines between strategies
+    for strategy_idx in range(1, len(strategies)):
+        x_pos = strategy_idx * cols_per_strategy - 0.5
+        ax.axvline(x=x_pos, color='black', linewidth=2)
+    
+    # Add separator lines between policies
+    for policy_idx in range(1, len(policies)):
+        y_pos = policy_idx * rows_per_policy - 0.5
+        ax.axhline(y=y_pos, color='black', linewidth=2)
+    
     # Add colorbar
-    max_value = np.max(idle_matrix)
-    min_value = np.min(idle_matrix)
-    cbar = plt.colorbar(im, ax=ax, shrink=0.8)
+    cbar = plt.colorbar(im, ax=ax, shrink=0.6)
     cbar.set_label('Idle Time (%)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
     cbar.ax.tick_params(labelsize=10)
     
@@ -364,74 +406,72 @@ def generate_combined_idle_matrix(base_folder, satellite_count=None):
             row_idx = policy_idx * rows_per_policy + img_idx
             
             for strategy_idx, strategy in enumerate(strategies):
-                idle_timesteps = timestep_matrix[row_idx, strategy_idx]
-                idle_pct = idle_matrix[row_idx, strategy_idx]
-                
-                # Format text showing idle time and percentage
-                idle_time = steps_to_time_string(int(idle_timesteps))
-                value_text = f'{idle_time}\n{idle_pct:.1f}%'
+                for sat_count_idx, sat_count in enumerate(satellite_counts):
+                    col_idx = strategy_idx * cols_per_strategy + sat_count_idx
+                    idle_timesteps = timestep_matrix[row_idx, col_idx]
+                    idle_pct = idle_matrix[row_idx, col_idx]
                     
-                text = ax.text(strategy_idx, row_idx, value_text, ha="center", va="center", 
-                             color='black', fontweight='bold', fontsize=9)
+                    # Format text showing idle time and percentage
+                    idle_time = steps_to_time_string(int(idle_timesteps))
+                    value_text = f'{idle_time}\n{idle_pct:.1f}%'
+                        
+                    text = ax.text(col_idx, row_idx, value_text, ha="center", va="center", 
+                                 color='black', fontweight='bold', fontsize=9)
     
     # Create comprehensive title
-    constellation_title = f" ({satellite_count} Satellite Constellation)" if satellite_count else ""
-    title = f'Idle Time (Wasted Connection Time){constellation_title}: All Image Sizes\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\nTime format: hh:mm:ss | {better_text}'
+    better_text = "Lower Values = Better Performance (Less Wasted Time)"
+    title = f'Idle Time (Wasted Connection Time): All Parameter Combinations\nIdle time = Connected satellites with empty buffers (spacing strategy + link policy issues)\nSatellite counts: {", ".join([str(s) for s in satellite_counts])} | Image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\nTime format: hh:mm:ss | {better_text}'
     
     # Titles and labels
-    ax.set_title(title, fontsize=16, fontweight='bold', pad=25)
-    ax.set_xlabel('Spacing Strategy', fontsize=14, fontweight='bold')
-    ax.set_ylabel('Scheduling Policy (with Image Sizes)', fontsize=14, fontweight='bold')
-    
-    # Add horizontal grid lines to separate policies (every 4 rows)
-    for policy_idx in range(1, len(policies)):
-        ax.axhline(y=policy_idx * rows_per_policy - 0.5, color='black', linestyle='-', linewidth=3)
+    ax.set_title(title, fontsize=16, fontweight='bold', pad=40)
+    ax.set_xlabel('Satellite Count & Spacing Strategy', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Scheduling Policy & Image Size', fontsize=14, fontweight='bold')
     
     # Add grid for better readability
-    ax.set_xticks(np.arange(len(strategies)+1)-.5, minor=True)
+    ax.set_xticks(np.arange(total_cols+1)-.5, minor=True)
     ax.set_yticks(np.arange(total_rows+1)-.5, minor=True)
-    ax.grid(which="minor", color="gray", linestyle='-', linewidth=1)
+    ax.grid(which="minor", color="gray", linestyle='-', linewidth=0.5)
     ax.tick_params(which="minor", size=0)
-    
-    # Rotate labels for better readability
-    plt.xticks(rotation=45, ha='right')
-    plt.yticks(rotation=0)
     
     plt.tight_layout()
     
-    # Save the plot with satellite count in filename
-    if satellite_count is not None:
-        output_filename = f'combined_idle_matrix_{satellite_count}sats.png'
+    # Save the plot to current working directory
+    if base_path.name == ".":
+        output_path = Path.cwd() / 'combined_idle_matrix_sats.png'
     else:
-        output_filename = 'combined_idle_matrix.png'
-    output_path = base_path.parent / output_filename
+        output_path = base_path / 'combined_idle_matrix_sats.png'
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
-    print(f"\n✅ Combined idle matrix saved: {output_path}")
+    print(f"\n✅ Combined 4D idle matrix saved: {output_path}")
     
+    # Save the raw data with proper 4D structure
     # Print summary showing worst idle performance for each policy across all image sizes
     print(f"\n=== COMBINED IDLE TIME SUMMARY ===")
-    print(f"{'Policy':<15} {'Image Size':<12} {'Worst Strategy':<20} {'Idle Steps':<12} {'Idle %':<12}")
-    print("-" * 85)
+    print(f"{'Policy':<15} {'Image Size':<12} {'Worst Strategy':<25} {'Worst Sat Count':<15} {'Idle Steps':<12} {'Idle %':<12}")
+    print("-" * 105)
     
     for policy_idx, policy in enumerate(policies):
         for img_idx, img_size in enumerate(image_sizes):
             row_idx = policy_idx * rows_per_policy + img_idx
             row_idles = idle_matrix[row_idx, :]
-            worst_strategy_idx = np.argmax(row_idles)  # Highest idle = worst
-            worst_strategy = strategies[worst_strategy_idx]
-            worst_idle = row_idles[worst_strategy_idx]
-            worst_timesteps = timestep_matrix[row_idx, worst_strategy_idx]
+            worst_col_idx = np.argmax(row_idles)  # Highest idle = worst
             
-            print(f"{policy.upper():<15} {img_size:>7.3f} MB   {worst_strategy:<20} {worst_timesteps:>8.0f}     {worst_idle:>8.1f}%")
+            # Convert flat column index back to strategy and satellite count
+            worst_strategy_idx = worst_col_idx // len(satellite_counts)
+            worst_sat_count_idx = worst_col_idx % len(satellite_counts)
+            worst_strategy = strategies[worst_strategy_idx]
+            worst_sat_count = satellite_counts[worst_sat_count_idx]
+            worst_idle = row_idles[worst_col_idx]
+            worst_timesteps = timestep_matrix[row_idx, worst_col_idx]
+            
+            print(f"{policy.upper():<15} {img_size:>7.3f} MB   {worst_strategy:<25} {worst_sat_count:>10} sat    {worst_timesteps:>8.0f}     {worst_idle:>8.1f}%")
 
 def main():
-    parser = argparse.ArgumentParser(description='Generate combined idle time matrix across image sizes for specific satellite count')
+    parser = argparse.ArgumentParser(description='Generate combined 4D idle time matrix across image sizes and satellite counts')
     parser.add_argument('base_folder', help='Path to folder containing multiple analysis folders')
-    parser.add_argument('--sats', type=int, help='Satellite count to filter by (e.g., 1, 50, 100, 200)')
     args = parser.parse_args()
     
-    generate_combined_idle_matrix(args.base_folder, args.sats)
+    generate_combined_idle_matrix_sats(args.base_folder)
 
 if __name__ == "__main__":
     main()
