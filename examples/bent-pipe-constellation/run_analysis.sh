@@ -1,10 +1,44 @@
 #!/bin/bash
 # Complete Spacing Strategy & Link Policy Simulation Pipeline
 # Runs simulations for all 4x4 combinations and organizes results
+# Usage: ./run_analysis.sh [satellite_count] [image_size]
+#   satellite_count: 1, 50, 100, or 200 (default: 50)
+#   image_size: 028, 280, 2800, or 28000 (default: 28000, represents 0.028, 0.28, 2.8, 28 MB)
 
 set -e  # Exit on any error
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Parse parameters
+SAT_COUNT=${1:-50}        # Default to 50 if not specified
+IMAGE_SIZE_CODE=${2:-28000}  # Default to 28000 (28 MB) if not specified
+
+# Validate satellite count
+case "$SAT_COUNT" in
+    1|50|100|200)
+        ;;
+    *)
+        echo "❌ Error: Invalid satellite count '$SAT_COUNT'"
+        echo "   Valid options: 1, 50, 100, 200"
+        echo "   Usage: ./run_analysis.sh [satellite_count] [image_size]"
+        exit 1
+        ;;
+esac
+
+# Validate image size code
+case "$IMAGE_SIZE_CODE" in
+    028|280|2800|28000)
+        ;;
+    *)
+        echo "❌ Error: Invalid image size code '$IMAGE_SIZE_CODE'"
+        echo "   Valid options: 028 (0.028MB), 280 (0.28MB), 2800 (2.8MB), 28000 (28MB)"
+        echo "   Usage: ./run_analysis.sh [satellite_count] [image_size]"
+        exit 1
+        ;;
+esac
+
+# Format satellite count for file names (2 digits with leading zeros)
+SAT_COUNT_FORMATTED=$(printf "%02d" "$SAT_COUNT")
 
 echo "============================================================"
 echo "COMPLETE 4×4 SPACING & LINK POLICY SIMULATION PIPELINE"
@@ -12,12 +46,44 @@ echo "============================================================"
 
 cd "$SCRIPT_DIR"
 
-# Create timestamped output directory
+# Copy the appropriate sensor file for the specified image size
+SENSOR_SOURCE="data/sensor_${IMAGE_SIZE_CODE}.dat"
+if [ -f "$SENSOR_SOURCE" ]; then
+    echo "   📷 Using sensor file: $SENSOR_SOURCE"
+    cp "$SENSOR_SOURCE" "configuration/sensor.dat"
+else
+    echo "   ❌ Error: Sensor file not found: $SENSOR_SOURCE"
+    echo "   Available files:"
+    ls -1 data/sensor_*.dat | sed 's/^/     /'
+    exit 1
+fi
+
+# Read sensor configuration to get image size
+SENSOR_CONFIG="configuration/sensor.dat"
+if [ -f "$SENSOR_CONFIG" ]; then
+    SENSOR_LINE=$(grep -v "^bits-per-sense" "$SENSOR_CONFIG" | head -1)
+    IFS=',' read -ra SENSOR_PARAMS <<< "$SENSOR_LINE"
+    BITS_PER_SENSE="${SENSOR_PARAMS[0]}"
+    
+    # Calculate image size and format as 5-digit number
+    # Convert bits to MB, then to integer representation for folder naming
+    IMAGE_SIZE_MB=$(echo "scale=3; $BITS_PER_SENSE / 8 / 1024 / 1024" | bc -l)
+    # Convert to integer format for folder naming (e.g., 0.028 -> 00028, 28.99 -> 28000)
+    IMAGE_SIZE_INT=$(echo "$IMAGE_SIZE_MB * 1000" | bc -l | cut -d'.' -f1)
+    IMAGE_SIZE_FORMATTED=$(printf "%05d" "$IMAGE_SIZE_INT")
+else
+    echo "❌ Error: sensor.dat not found"
+    exit 1
+fi
+
+# Create timestamped output directory with image size and satellite count
 timestamp=$(date +"%Y%m%d_%H%M%S")
-OUTPUT_DIR="constellation_analysis_${timestamp}"
+OUTPUT_DIR="constellation_analysis_${timestamp}_${IMAGE_SIZE_FORMATTED}_${SAT_COUNT_FORMATTED}"
 mkdir -p "$OUTPUT_DIR"
 
 echo "📁 Creating simulation structure in: $OUTPUT_DIR"
+echo "🛰️  Satellite count: $SAT_COUNT"
+echo "📷 Image size: ${IMAGE_SIZE_MB} MB (code: ${IMAGE_SIZE_CODE})"
 
 # Read current buffer configuration
 BUFFER_MB=$(grep -v "^bits-per-sense" configuration/sensor.dat | cut -d',' -f5)
@@ -59,6 +125,39 @@ for spacing in "${SPACING_STRATEGIES[@]}"; do
     echo ""
     echo "📡 SPACING STRATEGY: $(echo $spacing | tr '[:lower:]' '[:upper:]')"
     echo "------------------------------------------------------------"
+    
+    # Copy the appropriate constellation file for this satellite count and spacing strategy
+    # Map spacing strategy names to constellation file prefixes
+    case "$spacing" in
+        "close-spaced")
+            SPACING_FILE_PREFIX="close"
+            ;;
+        "close-orbit-spaced")
+            SPACING_FILE_PREFIX="close_orbit"
+            ;;
+        "frame-spaced")
+            SPACING_FILE_PREFIX="frame"
+            ;;
+        "orbit-spaced")
+            SPACING_FILE_PREFIX="orbit"
+            ;;
+        *)
+            echo "   ❌ Error: Unknown spacing strategy: $spacing"
+            exit 1
+            ;;
+    esac
+    
+    CONSTELLATION_SOURCE="data/constellation_${SPACING_FILE_PREFIX}_${SAT_COUNT_FORMATTED}.dat"
+    
+    if [ -f "$CONSTELLATION_SOURCE" ]; then
+        echo "   🛰️  Using constellation file: $CONSTELLATION_SOURCE"
+        cp "$CONSTELLATION_SOURCE" "configuration/constellation.dat"
+    else
+        echo "   ❌ Error: Constellation file not found: $CONSTELLATION_SOURCE"
+        echo "   Available files:"
+        ls -1 data/constellation_*.dat | sed 's/^/     /'
+        exit 1
+    fi
     
     # Create temporary directory for this spacing strategy's logs
     temp_spacing_dir="temp_${spacing}"
@@ -168,7 +267,14 @@ fi
 if [ -f "$CONSTELLATION_CONFIG" ]; then
     CONSTELLATION_LINE=$(grep -v "^count" "$CONSTELLATION_CONFIG" | head -1)
     IFS=',' read -ra CONSTELLATION_PARAMS <<< "$CONSTELLATION_LINE"
-    SAT_COUNT="${CONSTELLATION_PARAMS[0]}"
+    CONFIG_SAT_COUNT="${CONSTELLATION_PARAMS[0]}"
+    
+    # Verify that the constellation file matches our expected satellite count
+    if [ "$CONFIG_SAT_COUNT" != "$(printf "%05d" "$SAT_COUNT")" ]; then
+        echo "⚠️  Warning: Constellation file satellite count ($CONFIG_SAT_COUNT) doesn't match expected ($SAT_COUNT)"
+    fi
+else
+    CONFIG_SAT_COUNT="$(printf "%05d" "$SAT_COUNT")"
 fi
 
 # Read additional configuration for comprehensive stats
@@ -246,7 +352,7 @@ done
 echo ""
 echo "🎯 Configuration Summary:"
 echo "  Buffer Cap: ${BUFFER_MB} MB"
-echo "  Satellites: 50"
+echo "  Satellites: $SAT_COUNT"
 echo "  Total Combinations: $((${#SPACING_STRATEGIES[@]} * ${#POLICIES[@]}))"
 echo ""
 echo "💡 4×4 simulation data ready in: $OUTPUT_DIR"

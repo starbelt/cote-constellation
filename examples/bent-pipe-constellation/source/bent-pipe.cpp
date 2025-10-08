@@ -104,32 +104,9 @@ int main(int argc, char** argv) {
     }
   }
   
-  // Load appropriate constellation file based on spacing strategy
-  std::filesystem::path configurationDir(argv[1]);
-  std::filesystem::path dataDir = configurationDir.parent_path() / "data";
-  
-  // Map spacing strategies to constellation files
-  std::string constellationFilename = "constellation.dat"; // default fallback
-  if(spacingStr == "bent-pipe" || spacingStr == "bentpipe") {
-    constellationFilename = "constellation_bent.dat";
-  } else if(spacingStr == "close" || spacingStr == "close-spaced" || spacingStr == "closed") {
-    constellationFilename = "constellation_close.dat";
-  } else if(spacingStr == "close-orbit-spaced" || spacingStr == "close-orbit" || spacingStr == "closeorbit") {
-    constellationFilename = "constellation_close_orbit.dat";
-  } else if(spacingStr == "frame" || spacingStr == "frame-spaced") {
-    constellationFilename = "constellation_frame.dat";
-  } else if(spacingStr == "orbit" || spacingStr == "orbit-spaced") {
-    constellationFilename = "constellation_orbit.dat";
-  }
-  
-  // Try to load from data directory first, fall back to configuration directory
-  std::filesystem::path spacingConstellationFile = dataDir / constellationFilename;
-  if(std::filesystem::exists(spacingConstellationFile)) {
-    constellationFile = spacingConstellationFile;
-  } else {
-    // Fallback: use default constellation.dat from configuration directory
-    constellationFile = configurationDir / "constellation.dat";
-  }
+  // Constellation file selection is now handled by run_analysis.sh script
+  // The script copies the appropriate parameterized constellation file to configuration/constellation.dat
+  // based on both spacing strategy and satellite count parameters
   
   // Set up log
   std::vector<cote::LogLevel> levels = {cote::LogLevel::INFO};

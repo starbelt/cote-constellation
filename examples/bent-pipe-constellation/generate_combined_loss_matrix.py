@@ -128,19 +128,22 @@ def calculate_loss_for_strategy(strategy_folder):
     return results
 
 def extract_image_size_from_folder(folder_name):
-    """Extract image size from folder name like constellation_analysis_20250930_155950_00028"""
-    match = re.search(r'_(\d+)$', folder_name)
+    """Extract image size from folder name like constellation_analysis_20251007_193320_28000_50"""
+    # New format: constellation_analysis_YYYYMMDD_HHMMSS_IMAGESIZE_SATCOUNT
+    # Extract the second-to-last number (image size), not the last (satellite count)
+    match = re.search(r'_(\d+)_\d+$', folder_name)
     if match:
-        # Convert the numeric part to MB (e.g., 00028 -> 0.028)
-        size_code = int(match.group(1))
-        if size_code < 1000:
-            return size_code / 1000  # e.g., 28 -> 0.028
-        elif size_code < 10000:
-            return size_code / 1000  # e.g., 289 -> 0.289  
-        elif size_code < 100000:
-            return size_code / 1000  # e.g., 2899 -> 2.899
+        size_str = match.group(1)
+        # Convert to MB - add decimal point in appropriate position
+        if len(size_str) == 5:  # 00028 -> 0.028, 28000 -> 28.000
+            if size_str.startswith('000'):  # 00028 -> 0.028
+                return float(size_str) / 1000
+            else:  # 28000 -> 28.0
+                return float(size_str) / 1000
+        elif len(size_str) == 4:  # 0280 -> 0.280, 2800 -> 2.800
+            return float(size_str) / 1000
         else:
-            return size_code / 1000  # e.g., 28990 -> 28.990
+            return float(size_str) / 1000
     return 0.289  # fallback
 
 def generate_combined_loss_matrix(base_folder):

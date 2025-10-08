@@ -175,15 +175,19 @@ def calculate_idle_for_strategy(strategy_folder):
     return results, idle_data
 
 def extract_image_size_from_folder(folder_name):
-    """Extract image size from folder name like constellation_analysis_20250928_105916_00028"""
-    # Extract the last number after underscore
-    match = re.search(r'_(\d+)$', folder_name)
+    """Extract image size from folder name like constellation_analysis_20251007_193320_28000_50"""
+    # New format: constellation_analysis_YYYYMMDD_HHMMSS_IMAGESIZE_SATCOUNT
+    # Extract the second-to-last number (image size), not the last (satellite count)
+    match = re.search(r'_(\d+)_\d+$', folder_name)
     if match:
         size_str = match.group(1)
         # Convert to MB - add decimal point in appropriate position
-        if len(size_str) == 5:  # 00028 -> 0.0028, 28990 -> 28.990
-            return float(size_str) / 1000
-        elif len(size_str) == 4:  # Could be 0289 -> 0.289
+        if len(size_str) == 5:  # 00028 -> 0.028, 28000 -> 28.000
+            if size_str.startswith('000'):  # 00028 -> 0.028
+                return float(size_str) / 1000
+            else:  # 28000 -> 28.0
+                return float(size_str) / 1000
+        elif len(size_str) == 4:  # 0280 -> 0.280, 2800 -> 2.800
             return float(size_str) / 1000
         else:
             return float(size_str) / 1000
