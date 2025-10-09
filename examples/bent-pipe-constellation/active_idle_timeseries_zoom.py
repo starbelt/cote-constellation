@@ -381,12 +381,122 @@ def parse_arguments():
                        help='Start time in HH:MM:SS format (default: use first 1000 rows)')
     parser.add_argument('duration', nargs='?', type=int, default=None,
                        help='Duration in seconds (default: no limit if start_time specified)')
+    parser.add_argument('--runforseconds', type=int, default=None,
+                       help='Run simulation for specified seconds before generating charts (requires specific folder)')
     
     return parser.parse_args()
+
+def run_simulation_and_generate_charts(folder_name, runforseconds, strategy, policy, start_time, duration):
+    """Run simulation for specified duration and then generate charts"""
+    
+    # Validate folder exists
+    folder_path = SCRIPT_DIR / folder_name
+    if not folder_path.exists():
+        print(f"❌ Error: Folder '{folder_name}' does not exist!")
+        return
+    
+    if not folder_path.is_dir():
+        print(f"❌ Error: '{folder_name}' is not a directory!")
+        return
+    
+    # Extract parameters from folder name
+    parts = folder_name.split('_')
+    if len(parts) < 6:
+        print(f"❌ Error: Folder name '{folder_name}' doesn't follow expected format:")
+        print("   Expected: constellation_analysis_YYYYMMDD_HHMMSS_IMAGESIZE_SATCOUNT")
+        return
+    
+    try:
+        size_part = parts[4]  # e.g., "00027" or "28000"
+        sat_part = parts[5]   # e.g., "01" or "200"
+        
+        image_size = int(size_part) / 1000.0  # Convert back to MB
+        sat_count = int(sat_part)
+        
+        print(f"📁 Running simulation for folder: {folder_name}")
+        print(f"   Image size: {image_size:.3f}MB")
+        print(f"   Satellite count: {sat_count}")
+        print(f"   Duration: {runforseconds} seconds ({runforseconds/3600:.1f} hours)")
+        print(f"   Chart params: strategy={strategy}, policy={policy}")
+        print()
+        
+    except (ValueError, IndexError):
+        print(f"❌ Error: Could not parse parameters from folder name '{folder_name}'")
+        return
+    
+    # Look for run_simulation.sh script
+    run_script = folder_path / "run_simulation.sh"
+    if not run_script.exists():
+        print(f"❌ Error: No run_simulation.sh script found in {folder_name}")
+        print("   Expected to find: run_simulation.sh")
+        return
+    
+    print(f"🚀 Starting simulation...")
+    print(f"   Script: {run_script}")
+    print(f"   Duration: {runforseconds} seconds")
+    print()
+    
+    # Run the simulation
+    import subprocess
+    import time
+    
+    try:
+        # Change to the folder directory and run the simulation
+        process = subprocess.Popen(
+            ["bash", "run_simulation.sh", str(runforseconds)],
+            cwd=folder_path,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        print("⏱️  Simulation running... (this may take a while)")
+        start_time_sim = time.time()
+        
+        # Wait for completion
+        stdout, stderr = process.communicate()
+        end_time_sim = time.time()
+        elapsed = end_time_sim - start_time_sim
+        
+        if process.returncode == 0:
+            print(f"✅ Simulation completed successfully in {elapsed:.1f} seconds")
+            if stdout:
+                print("Simulation output:")
+                print(stdout)
+        else:
+            print(f"❌ Simulation failed with return code {process.returncode}")
+            if stderr:
+                print("Error output:")
+                print(stderr)
+            return
+        
+    except Exception as e:
+        print(f"❌ Error running simulation: {e}")
+        return
+    
+    print()
+    print("📊 Generating chart from simulation results...")
+    
+    # Now generate chart for the specific strategy and policy
+    print(f"  Processing {strategy} strategy with {policy} policy...")
+    test_single_strategy(strategy, policy, start_time, duration, folder_path)
+    
+    return True
 
 def main():
     args = parse_arguments()
     
+    # If runforseconds is specified, we need a specific folder
+    if args.runforseconds is not None:
+        if args.folder is None:
+            print("❌ Error: --runforseconds requires a specific folder to be specified")
+            print("   Example: python active_idle_timeseries_zoom.py constellation_analysis_20251007_234546_28000_200 close-spaced sticky --runforseconds 3600")
+            return
+        
+        # Run simulation first, then generate charts
+        return run_simulation_and_generate_charts(args.folder, args.runforseconds, args.strategy, args.policy, args.start_time, args.duration)
+    
+    # Regular processing mode
     # Extract constellation analysis data
     constellation_folder = extract_constellation_data(args.folder)
     if not constellation_folder:

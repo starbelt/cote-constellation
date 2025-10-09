@@ -300,12 +300,13 @@ def generate_combined_efficiency_matrix(base_folder):
     # Create the plot with adjusted size for the much larger 4D matrix
     fig, ax = plt.subplots(figsize=(24, 18))  # Larger to accommodate 4x more columns
     
-    # Use Greens colormap (higher efficiency = better = darker green)
+    # Use Greens colormap for total data downloaded (higher data = better = darker green)
     cmap = 'Greens'
-    better_text = "Higher Values = Better Performance"
+    better_text = "Higher Values = Better Performance (More Data Downloaded)"
     
-    # Create the heatmap
-    im = ax.imshow(efficiency_matrix, cmap=cmap, aspect='auto')
+    # Create the heatmap based on total data downloaded (in GB for better scale)
+    download_matrix_gb = download_matrix / 1000  # Convert MB to GB for display
+    im = ax.imshow(download_matrix_gb, cmap=cmap, aspect='auto')
     
     # Create strategy labels that repeat for each satellite count
     strategy_labels = []
@@ -355,7 +356,7 @@ def generate_combined_efficiency_matrix(base_folder):
     
     # Add colorbar
     cbar = plt.colorbar(im, ax=ax, shrink=0.6)
-    cbar.set_label('Download Efficiency (%)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
+    cbar.set_label('Total Data Downloaded (GB)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
     cbar.ax.tick_params(labelsize=10)
     
     # Add text annotations with values 
@@ -384,7 +385,7 @@ def generate_combined_efficiency_matrix(base_folder):
     # Create comprehensive title
     img_size_str = ", ".join([f"{s:.3f}MB" for s in image_sizes])
     sat_count_str = ", ".join([f"{sc}" for sc in satellite_counts])
-    title = f'4D Data Download Efficiency Matrix\nImage Sizes: {img_size_str} | Satellite Counts: {sat_count_str}\n{better_text}'
+    title = f'4D Data Download Volume Matrix (Shaded by Total GB Downloaded)\nImage Sizes: {img_size_str} | Satellite Counts: {sat_count_str}\nEach cell shows: Total Downloaded | Efficiency % | {better_text}'
     
     # Titles and labels
     ax.set_title(title, fontsize=16, fontweight='bold', pad=25)

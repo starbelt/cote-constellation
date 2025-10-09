@@ -22,8 +22,93 @@ SCRIPT_DIR = Path(__file__).parent.absolute()
 SPACING_STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
 
-def extract_constellation_data(folder_path=None):
-    """Extract data from constellation_analysis folders"""
+# Image size mappings
+IMAGE_SIZE_MAP = {
+    's': 0.027,   # Small images (corrected from 0.028)
+    'm': 0.279,   # Medium images (corrected from 0.28)
+    'l': 2.799,   # Large images (corrected from 2.8)
+    'xl': 28.0    # Extra large images
+}
+
+def parse_image_sizes(image_str):
+    """Parse comma-separated image size abbreviations to MB values"""
+    if not image_str:
+        return list(IMAGE_SIZE_MAP.values())  # Return all if none specified
+    
+    sizes = []
+    for size_abbrev in image_str.split(','):
+        size_abbrev = size_abbrev.strip().lower()
+        if size_abbrev in IMAGE_SIZE_MAP:
+            sizes.append(IMAGE_SIZE_MAP[size_abbrev])
+        else:
+            valid_sizes = ', '.join(IMAGE_SIZE_MAP.keys())
+            raise ValueError(f"Invalid image size '{size_abbrev}'. Valid options: {valid_sizes}")
+    
+    return sizes
+
+def parse_satellite_counts(sats_str):
+    """Parse comma-separated satellite counts"""
+    if not sats_str:
+        return [1, 50, 100, 200]  # Return all if none specified
+    
+    try:
+        counts = [int(count.strip()) for count in sats_str.split(',')]
+        return counts
+    except ValueError as e:
+        raise ValueError(f"Invalid satellite count: {e}")
+
+def find_matching_folders(base_dir, image_sizes=None, satellite_counts=None):
+    """Find constellation analysis folders matching the specified parameters"""
+    if image_sizes is None:
+        image_sizes = list(IMAGE_SIZE_MAP.values())
+    if satellite_counts is None:
+        satellite_counts = [1, 50, 100, 200]
+    
+    # Convert image sizes to the format used in folder names (5 digits with leading zeros)
+    size_patterns = []
+    for size in image_sizes:
+        if size < 1:
+            # For small sizes like 0.027, convert to 00027 format
+            size_int = int(size * 1000)
+            size_patterns.append(f"{size_int:05d}")
+        else:
+            # For larger sizes like 28.0, convert to 28000 format
+            size_int = int(size * 1000)
+            size_patterns.append(f"{size_int:05d}")
+    
+    # Convert satellite counts to match the folder format (no leading zeros for larger numbers)
+    sat_patterns = []
+    for count in satellite_counts:
+        if count < 10:
+            sat_patterns.append(f"{count:02d}")  # "01", "02", etc.
+        else:
+            sat_patterns.append(str(count))      # "50", "100", "200"
+    
+    matching_folders = []
+    
+    # Look for folders with pattern: constellation_analysis_YYYYMMDD_HHMMSS_IMAGESIZE_SATCOUNT
+    all_folders = [d for d in base_dir.iterdir() 
+                   if d.is_dir() and d.name.startswith('constellation_analysis_')]
+    
+    for folder in all_folders:
+        parts = folder.name.split('_')
+        if len(parts) >= 6:  # constellation_analysis_DATE_TIME_SIZE_SATS
+            try:
+                # Extract image size and satellite count from folder name
+                size_part = parts[4]  # Should be like "00027" or "28000"
+                sat_part = parts[5]   # Should be like "01" or "200"
+                
+                # Check if this folder matches our criteria
+                if size_part in size_patterns and sat_part in sat_patterns:
+                    matching_folders.append(folder)
+            except (ValueError, IndexError):
+                # Skip folders that don't follow the expected naming convention
+                continue
+    
+    return sorted(matching_folders, key=lambda x: x.name)
+
+def extract_constellation_data(folder_path=None, image_sizes=None, satellite_counts=None):
+    """Extract data from constellation_analysis folders with filtering"""
     
     if folder_path:
         # User specified a folder
@@ -46,19 +131,42 @@ def extract_constellation_data(folder_path=None):
             print(f"⚠️  Warning: Folder '{folder.name}' does not follow expected naming convention (constellation_analysis_YYYYMMDD_HHMMSS)")
         
         print(f"📁 Using specified constellation analysis folder: {folder.name}")
-        return folder
+        return [folder]  # Return as list for consistency
     else:
-        # Find latest folder (existing behavior)
-        constellation_folders = [d for d in SCRIPT_DIR.iterdir() 
-                               if d.is_dir() and d.name.startswith('constellation_analysis_')]
+        # Find matching folders based on image sizes and satellite counts
+        matching_folders = find_matching_folders(SCRIPT_DIR, image_sizes, satellite_counts)
         
-        if not constellation_folders:
-            raise FileNotFoundError("No constellation_analysis folders found")
+        if not matching_folders:
+            size_str = ", ".join([f"{s:.3f}MB" for s in image_sizes]) if image_sizes else "all"
+            sats_str = ", ".join([str(s) for s in satellite_counts]) if satellite_counts else "all"
+            print(f"❌ No constellation_analysis folders found matching:")
+            print(f"   Image sizes: {size_str}")
+            print(f"   Satellite counts: {sats_str}")
+            return None
         
-        # Sort by folder name (which includes timestamp) to get the latest
-        latest_folder = sorted(constellation_folders, key=lambda x: x.name)[-1]
-        print(f"📁 Using latest constellation analysis folder: {latest_folder.name}")
-        return latest_folder
+        print(f"📁 Found {len(matching_folders)} matching constellation analysis folders:")
+        for folder in matching_folders:
+            parts = folder.name.split('_')
+            if len(parts) >= 6:
+                size_part = parts[4]
+                sat_part = parts[5]
+                
+                # Convert size part back to readable format
+                try:
+                    size_val = int(size_part) / 1000.0
+                    if size_val < 1:
+                        size_display = f"{size_val:.3f}MB"
+                    else:
+                        size_display = f"{size_val:.1f}MB"
+                    
+                    sat_display = f"{int(sat_part)} satellites"
+                    print(f"   - {folder.name} (Image: {size_display}, Sats: {sat_display})")
+                except ValueError:
+                    print(f"   - {folder.name}")
+            else:
+                print(f"   - {folder.name}")
+        
+        return matching_folders
 
 def extract_archive_data(strategy, archive_base_path):
     """Extract simulation data from zip archive for the given strategy."""
@@ -217,9 +325,36 @@ def create_strategy_chart_optimized(strategy, output_dir, archive_base_path=None
     plt.style.use('default')
     sns.set_palette("husl")
     
+    # Extract image size and satellite count from folder name for title
+    folder_name = archive_base_path.name if archive_base_path else "unknown"
+    image_size_str = "unknown"
+    sat_count_str = "unknown"
+    
+    parts = folder_name.split('_')
+    if len(parts) >= 6:
+        try:
+            # Convert from 5-digit format back to readable
+            size_part = parts[4]  # e.g., "00027" or "28000"
+            sat_part = parts[5]   # e.g., "01" or "200"
+            
+            image_size = int(size_part) / 1000.0  # Convert back to MB
+            sat_count = int(sat_part)
+            
+            # Convert image size to readable format
+            if image_size < 0.1:
+                image_size_str = f"{image_size:.3f}MB"
+            elif image_size < 1:
+                image_size_str = f"{image_size:.2f}MB"
+            else:
+                image_size_str = f"{image_size:.1f}MB"
+            
+            sat_count_str = f"{sat_count} satellites"
+        except (ValueError, IndexError):
+            pass
+    
     # Create 4 vertically stacked subplots - made even larger for better visibility
     fig, axes = plt.subplots(4, 1, figsize=(28, 22))  # Increased from (24, 18)
-    fig.suptitle(f'{strategy.replace("-", " ").title()} Strategy - All Policies', 
+    fig.suptitle(f'{strategy.replace("-", " ").title()} Strategy - All Policies\n{image_size_str} | {sat_count_str}', 
                  fontsize=20, fontweight='bold')  # Larger title font
     
     # Enhanced color scheme with more distinct, high-contrast colors for satellites
@@ -244,11 +379,10 @@ def create_strategy_chart_optimized(strategy, output_dir, archive_base_path=None
         'satellites': base_colors * 2  # Ensure we have enough colors for 50+ satellites
     }
     
-    # Extract archive data once for this strategy - use provided path or find latest folder
+    # Extract archive data once for this strategy - use provided path
     if archive_base_path is None:
-        archive_base_path = extract_constellation_data()
-        if not archive_base_path:
-            return None
+        print(f"    Error: No archive base path provided for {strategy}")
+        return None
     temp_dir = extract_archive_data(strategy, archive_base_path)
     if temp_dir is None:
         return None
@@ -350,7 +484,22 @@ def create_strategy_chart_optimized(strategy, output_dir, archive_base_path=None
         plt.tight_layout(pad=2.5)  # Increased padding for larger chart
         plt.subplots_adjust(right=0.82, hspace=0.4)  # More space for larger chart and legend
         
-        output_file = output_dir / f"active_idle_timeseries_{strategy.replace('-', '_')}_strategy.png"
+        # Generate filename with image size and satellite count
+        parts = archive_base_path.name.split('_')
+        if len(parts) >= 6:
+            size_part = parts[4]  # e.g., "00027"
+            sat_part = parts[5]   # e.g., "01"
+            
+            # Convert to readable format for filename
+            try:
+                size_val = int(size_part) / 1000.0
+                sat_val = int(sat_part)
+                size_str = f"{size_val:.3f}".replace('.', 'p')  # e.g., "0p027"
+                output_file = output_dir / f"active_idle_timeseries_{strategy.replace('-', '_')}_strategy_{size_str}MB_{sat_val}sats.png"
+            except ValueError:
+                output_file = output_dir / f"active_idle_timeseries_{strategy.replace('-', '_')}_strategy.png"
+        else:
+            output_file = output_dir / f"active_idle_timeseries_{strategy.replace('-', '_')}_strategy.png"
         plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white')
         plt.close()
         
@@ -371,27 +520,44 @@ def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Generate active/idle timeseries charts')
     parser.add_argument('folder', nargs='?', default=None, 
-                       help='Constellation analysis folder to process (optional, defaults to latest)')
+                       help='Constellation analysis folder to process (optional, defaults to matching folders)')
+    parser.add_argument('--image', '--images', type=str, default=None,
+                       help='Comma-separated image sizes: s,m,l,xl (s=0.028MB, m=0.28MB, l=2.8MB, xl=28MB)')
+    parser.add_argument('--sats', '--satellites', type=str, default=None,
+                       help='Comma-separated satellite counts: 1,50,100,200')
     args = parser.parse_args()
     
-    # Use existing constellation analysis directory
-    output_dir = extract_constellation_data(args.folder)
-    if not output_dir:
+    # Parse image sizes and satellite counts
+    try:
+        image_sizes = parse_image_sizes(args.image)
+        satellite_counts = parse_satellite_counts(args.sats)
+    except ValueError as e:
+        print(f"❌ Error: {e}")
         return
-    print(f"Saving charts to: {output_dir.name}")
+    
+    # Use existing constellation analysis directories
+    folders = extract_constellation_data(args.folder, image_sizes, satellite_counts)
+    if not folders:
+        return
     
     generated_files = []
     
-    for strategy in SPACING_STRATEGIES:
-        print(f"Processing {strategy} strategy...")
-        output_file = create_strategy_chart_optimized(strategy, output_dir, output_dir)
-        if output_file:
-            generated_files.append(output_file)
+    for folder in folders:
+        print(f"\n📁 Processing folder: {folder.name}")
+        
+        for strategy in SPACING_STRATEGIES:
+            print(f"  Processing {strategy} strategy...")
+            output_file = create_strategy_chart_optimized(strategy, folder, folder)
+            if output_file:
+                generated_files.append(output_file)
         print()
     
-    print(f"✅ Generated {len(generated_files)} strategy charts in: {output_dir}")
-    for file in generated_files:
-        print(f"  - {file.name}")
+    if generated_files:
+        print(f"✅ Generated {len(generated_files)} strategy charts:")
+        for file in generated_files:
+            print(f"  - {file}")
+    else:
+        print("❌ No charts generated")
     
     return generated_files
 
