@@ -112,6 +112,11 @@ int main(int argc, char** argv) {
   std::vector<cote::LogLevel> levels = {cote::LogLevel::INFO};
   std::filesystem::create_directories(logDirectory);
   cote::Log log(levels,logDirectory.string());
+  
+  // Set up visibility log CSV
+  std::filesystem::path visibilityLogPath = logDirectory / "visibility_log.csv";
+  std::ofstream visibilityLog(visibilityLogPath.string());
+  visibilityLog << "time,sat_id,in_view,connected,buffer_mb,image_taken,lat_deg,lon_deg,freshness_timestamp\n";
   // Set up date and time
   std::ifstream dateTimeHandle(dateTimeFile.string());
   std::string line = "";
@@ -280,6 +285,23 @@ int main(int argc, char** argv) {
   }
   std::vector<cote::Channel> downlinks = std::vector<cote::Channel>();
   
+  // Tracking variables for visibility log
+  std::map<uint32_t, bool> satId2ImageTaken;
+  std::map<uint32_t, double> satId2ImageLat;
+  std::map<uint32_t, double> satId2ImageLon;
+  std::map<uint32_t, std::string> satId2ImageTimestamp;
+  std::map<uint32_t, bool> satId2PrevInView;
+  std::map<uint32_t, bool> satId2PrevConnected;
+  for(size_t i=0; i<satellites.size(); i++) {
+    uint32_t id = satellites.at(i).getID();
+    satId2ImageTaken[id] = false;
+    satId2ImageLat[id] = 0.0;
+    satId2ImageLon[id] = 0.0;
+    satId2ImageTimestamp[id] = "";
+    satId2PrevInView[id] = false;
+    satId2PrevConnected[id] = false;
+  }
+  
   // Create scheduling policy and spacing strategy
   std::unique_ptr<SchedulingPolicy> policy = PolicyFactory::createPolicy(policyStr);
   std::unique_ptr<SpacingStrategy> spacingStrategy = SpacingFactory::createStrategy(spacingStr);
@@ -401,10 +423,41 @@ int main(int argc, char** argv) {
         currPosn, prevSensePosn, prevSenseDateTime, dateTime,
         distanceKm, satId2ThresholdKm[LEAD_SAT_ID], LEAD_SAT_ID, satellites)) {
       
+      // Reset image taken flags for all satellites
+      for(size_t i=0; i<satellites.size(); i++) {
+        uint32_t id = satellites.at(i).getID();
+        satId2ImageTaken[id] = false;
+      }
+      
       // Execute observation according to spacing strategy
       spacingStrategy->executeObservation(
         satellites, satId2Sensor, satId2ThresholdKm, threshCoeff, dateTime, log);
+      
+      // Mark images as taken and record positions for all satellites
+      for(size_t i=0; i<satellites.size(); i++) {
+        uint32_t id = satellites.at(i).getID();
+        satId2ImageTaken[id] = true;
+        
+        const std::array<double,3> satPosn = satellites.at(i).getECIPosn();
+        const double JD_IMG = cote::util::calcJulianDayFromYMD(
+          dateTime.getYear(), dateTime.getMonth(), dateTime.getDay()
+        );
+        const uint32_t SEC_IMG = cote::util::calcSecSinceMidnight(
+          dateTime.getHour(), dateTime.getMinute(), dateTime.getSecond()
+        );
+        const uint32_t NS_IMG = dateTime.getNanosecond();
+        
+        satId2ImageLat[id] = cote::util::calcSubpointLatitude(satPosn);
+        satId2ImageLon[id] = cote::util::calcSubpointLongitude(JD_IMG, SEC_IMG, NS_IMG, satPosn);
+        satId2ImageTimestamp[id] = dateTime.toString();
+      }
     } else {
+      // Reset image taken flags when no observation
+      for(size_t i=0; i<satellites.size(); i++) {
+        uint32_t id = satellites.at(i).getID();
+        satId2ImageTaken[id] = false;
+      }
+      
       // Update frame state for strategies that need it (e.g., frame-spaced)
       spacingStrategy->updateFrameState(LEAD_SAT_ID, currPosn, dateTime, satId2Sensor);
     }
@@ -457,6 +510,59 @@ int main(int argc, char** argv) {
          )
         );
       }
+      
+      // Write visibility log entries only for events (state changes or image captures)
+      const double simTimeSeconds = static_cast<double>(stepCount) * totalStepInSec;
+      for(size_t i=0; i<satellites.size(); i++) {
+        const uint32_t SAT_ID = satellites.at(i).getID();
+        
+        // Check if satellite is visible to any ground station
+        bool inView = false;
+        for(size_t j=0; j<groundStations.size(); j++) {
+          const double LAT = groundStations.at(j).getLatitude();
+          const double LON = groundStations.at(j).getLongitude();
+          const double HAE = groundStations.at(j).getHAE();
+          const std::array<double,3> satEciPosn = satellites.at(i).getECIPosn();
+          if(cote::util::calcElevationDeg(JD,SEC,NS,LAT,LON,HAE,satEciPosn)>=10.0) {
+            inView = true;
+            break;
+          }
+        }
+        
+        // Check if satellite is currently connected (scheduled for downlink)
+        bool connected = satId2Occupied[SAT_ID];
+        
+        // Check if any event occurred (state change or image taken)
+        bool visibilityChanged = (inView != satId2PrevInView[SAT_ID]);
+        bool connectionChanged = (connected != satId2PrevConnected[SAT_ID]);
+        bool imageTaken = satId2ImageTaken[SAT_ID];
+        
+        // Only log if there's an event
+        if(visibilityChanged || connectionChanged || imageTaken) {
+          // Get current buffer in MB
+          double bufferMB = (static_cast<double>(satId2Sensor[SAT_ID]->getBitsBuffered())/8.0)/1.0e6;
+          
+          // Get image data if taken this timestep
+          double latDeg = imageTaken ? satId2ImageLat[SAT_ID] : 0.0;
+          double lonDeg = imageTaken ? satId2ImageLon[SAT_ID] : 0.0;
+          std::string timestamp = imageTaken ? satId2ImageTimestamp[SAT_ID] : "";
+          
+          // Write CSV row for this event
+          visibilityLog << simTimeSeconds << ","
+                       << SAT_ID << ","
+                       << (inView ? 1 : 0) << ","
+                       << (connected ? 1 : 0) << ","
+                       << std::fixed << std::setprecision(6) << bufferMB << ","
+                       << (imageTaken ? 1 : 0) << ","
+                       << std::fixed << std::setprecision(6) << latDeg << ","
+                       << std::fixed << std::setprecision(6) << lonDeg << ","
+                       << timestamp << "\n";
+        }
+        
+        // Update previous state tracking
+        satId2PrevInView[SAT_ID] = inView;
+        satId2PrevConnected[SAT_ID] = connected;
+      }
     }
     // Update simulation to the next time step
     dateTime.update(hourStep,minuteStep,secondStep,nanosecondStep);
@@ -483,6 +589,10 @@ int main(int argc, char** argv) {
   }
   // Write out logs
   log.writeAll();
+  
+  // Close visibility log
+  visibilityLog.close();
+  
   // Clean up
   for(
    std::map<uint32_t,cote::Sensor*>::iterator it=satId2Sensor.begin();
