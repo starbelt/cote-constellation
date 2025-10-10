@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate combined idle time matrix across all image sizes and satellite counts"""
+"""Generate combined total idle time matrix (overall system utilization) using visibility logs across all image sizes and satellite counts"""
 
 import pandas as pd
 import numpy as np
@@ -11,13 +11,6 @@ from pathlib import Path
 import argparse
 import os
 import re
-
-def steps_to_time_string(steps):
-    """Convert timesteps (seconds) to hh:mm:ss format"""
-    hours = steps // 3600
-    minutes = (steps % 3600) // 60
-    seconds = steps % 60
-    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 def read_config_from_zip(zip_path):
     """Read configuration from simulation_logs.zip"""
@@ -50,105 +43,49 @@ def read_config_from_zip(zip_path):
     
     return config
 
-def calculate_idle_time_for_policy(policy_dir):
-    """Calculate total idle time using active_idle_timeseries.py state 2 logic (VISIBLE IDLE LOGIC)
-    State 2 = Connected BUT no buffer to drain (considers current AND previous buffer states)"""
-    total_idle_timesteps = 0
-    total_connected_timesteps = 0
+def calculate_total_idle_from_visibility_log(policy_dir):
+    """Calculate total idle time from visibility_log.csv using efficient event-based approach"""
     
-    try:
-        # Find all buffer files and tx-rx connection file
-        buffer_files = [f for f in os.listdir(policy_dir) if f.startswith('meas-MB-buffered-sat-') and f.endswith('.csv')]
-        tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
-        
-        if not tx_rx_file.exists():
-            print(f"   Warning: No tx-rx file found for policy")
-            return 0, 0
-        
-        # Load connection data
-        tx_rx_df = pd.read_csv(tx_rx_file)
-        if len(tx_rx_df.columns) < 2:
-            return 0, 0
-            
-        tx_rx_df = tx_rx_df.iloc[:, :2]
-        tx_rx_df.columns = ["timestamp", "satellite"]
-        tx_rx_df["timestamp"] = pd.to_datetime(tx_rx_df["timestamp"])
-        
-        # Process each satellite's buffer data
-        for buffer_file in buffer_files:
-            buffer_path = policy_dir / buffer_file
-            
-            try:
-                # Extract satellite ID from filename: meas-MB-buffered-sat-0060518000.csv -> 60518000-0
-                sat_id_match = re.search(r'meas-MB-buffered-sat-(\d+)\.csv', buffer_file)
-                if not sat_id_match:
-                    continue
-                    
-                sat_id_padded = sat_id_match.group(1)  # e.g., "0060518000"
-                sat_id_base = sat_id_padded.lstrip('0')  # Remove leading zeros -> "60518000"
-                satellite_id = f"{sat_id_base}-0"  # Format for tx-rx lookup -> "60518000-0"
-                
-                # Get connection timestamps for this satellite
-                connected_entries = tx_rx_df[tx_rx_df["satellite"] == satellite_id]
-                if connected_entries.empty:
-                    continue
-                
-                # Load buffer data
-                buffer_df = pd.read_csv(buffer_path)
-                if len(buffer_df) < 2 or len(buffer_df.columns) < 2:
-                    continue
-                    
-                buffer_df = buffer_df.iloc[:, :2]
-                buffer_df.columns = ["timestamp", "buffer_mb"]
-                buffer_df["timestamp"] = pd.to_datetime(buffer_df["timestamp"])
-                buffer_df["buffer_mb"] = pd.to_numeric(buffer_df["buffer_mb"], errors='coerce').fillna(0)
-                
-                # Sort by timestamp for proper ordering
-                buffer_df = buffer_df.sort_values('timestamp').reset_index(drop=True)
-                
-                # Create buffer lookup for efficient access
-                buffer_lookup = dict(zip(buffer_df["timestamp"], buffer_df["buffer_mb"]))
-                
-                # Count visible idle timesteps using state 2 logic from active_idle_timeseries.py
-                satellite_idle = 0
-                satellite_connected = 0
-                
-                # Convert connected_entries to sorted list for prev_buffer logic
-                connected_times = sorted(connected_entries["timestamp"].tolist())
-                
-                for i, conn_time in enumerate(connected_times):
-                    satellite_connected += 1
-                    
-                    # Get current buffer level at this timestamp
-                    current_buffer = buffer_lookup.get(conn_time, 0)
-                    
-                    # Get previous buffer level (same logic as active_idle_timeseries.py)
-                    prev_buffer = 0
-                    if i > 0:
-                        prev_time = connected_times[i-1]
-                        prev_buffer = buffer_lookup.get(prev_time, 0)
-                    
-                    # State 2 logic: Connected BUT no buffer to drain
-                    # NOT actively draining if: current_buffer <= 0.001 AND prev_buffer <= 0.001
-                    actively_draining = (current_buffer > 0.001) or (prev_buffer > 0.001)
-                    
-                    if not actively_draining:  # State 2: Connected but no buffer to drain
-                        satellite_idle += 1
-                
-                total_idle_timesteps += satellite_idle
-                total_connected_timesteps += satellite_connected
-                
-            except Exception as e:
-                continue
+    visibility_log_path = policy_dir / "visibility_log.csv"
     
-    except Exception as e:
-        print(f"   Error calculating idle time: {e}")
+    if not visibility_log_path.exists():
+        print(f"   ⚠️  No visibility log found")
         return 0, 0
     
-    return total_idle_timesteps, total_connected_timesteps
+    try:
+        # Read visibility log
+        df = pd.read_csv(visibility_log_path)
+        
+        if len(df) == 0:
+            return 0, 0
+        
+        # Get simulation time span from simulation_summary.txt or default to 6 hours
+        sim_duration = 21600  # 6 hours in seconds - this is the total simulation time
+        
+        # For total idle calculation: time when system could be productive but isn't
+        # Total idle = (simulation time - time when connected AND buffer > threshold) / simulation time
+        # This includes:
+        # 1. Unconnected time (no satellite connected)
+        # 2. Connected but empty buffer time (satellite connected but buffer <= 0.001 MB)
+        
+        # Count events when system is productively active: connected AND buffer > threshold
+        productive_events = df[(df['connected'] == 1) & (df['buffer_mb'] > 0.001)]
+        
+        # Since we confirmed only 1 satellite connects at a time, each event = 1 second
+        # For scalability to multi-GS: this counts total productive seconds across all connections
+        actual_productive_time = len(productive_events)
+        
+        # Total idle time = simulation duration - productive time
+        total_idle_time = sim_duration - actual_productive_time
+        
+        return total_idle_time, sim_duration
+        
+    except Exception as e:
+        print(f"   Error processing visibility log: {e}")
+        return 0, 0
 
-def calculate_idle_for_strategy(strategy_folder):
-    """Calculate idle time percentages and absolute counts for all policies in a strategy"""
+def calculate_total_idle_for_strategy(strategy_folder):
+    """Calculate total idle time percentages and absolute counts for all policies in a strategy using visibility logs"""
     policies = ["sticky", "roundrobin", "fifo", "random"]
     results = {}
     idle_data = {}
@@ -173,17 +110,19 @@ def calculate_idle_for_strategy(strategy_folder):
             policy_dir = temp_path / policy
             
             if policy_dir.exists():
-                # Calculate idle time using connection and buffer analysis (ORIGINAL LOGIC)
-                total_idle, total_connected = calculate_idle_time_for_policy(policy_dir)
+                # Calculate total idle time using efficient visibility log approach
+                total_idle_time, sim_duration = calculate_total_idle_from_visibility_log(policy_dir)
                 
-                # Calculate idle percentage (ORIGINAL LOGIC)
-                if total_connected > 0:
-                    idle_percentage = (total_idle / total_connected) * 100
+                # Calculate idle percentage based on total simulation time
+                if sim_duration > 0:
+                    idle_percentage = (total_idle_time / sim_duration) * 100
                 else:
-                    idle_percentage = 0
+                    idle_percentage = 100  # If no simulation time, assume 100% idle
                 
                 results[policy] = idle_percentage
-                idle_data[policy] = total_idle  # Store absolute idle timesteps
+                idle_data[policy] = total_idle_time  # Store absolute idle time in seconds
+                
+                print(f"   {policy}: {sim_duration - total_idle_time}/{sim_duration}s productive time = {idle_percentage:.1f}% total idle")
             else:
                 results[policy] = 0
                 idle_data[policy] = 0
@@ -284,7 +223,7 @@ def generate_combined_idle_matrix_sats(base_folder):
                     strategy_folder = analysis_folder / strategy
                     
                     if strategy_folder.exists():
-                        idle_data[strategy], timestep_data[strategy] = calculate_idle_for_strategy(strategy_folder)
+                        idle_data[strategy], timestep_data[strategy] = calculate_total_idle_for_strategy(strategy_folder)
                         print(f"   ✅ {strategy}: Processed")
                     else:
                         print(f"   ❌ {strategy}: Not found")
@@ -416,7 +355,7 @@ def generate_combined_idle_matrix_sats(base_folder):
     
     # Add colorbar
     cbar = plt.colorbar(im, ax=ax, shrink=0.6)
-    cbar.set_label('Total Visible Idle Time (Seconds)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
+    cbar.set_label('Total Idle Time (Seconds)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
     cbar.ax.tick_params(labelsize=10)
     
     # Add text annotations with values - show idle time and percentage
@@ -427,19 +366,18 @@ def generate_combined_idle_matrix_sats(base_folder):
             for strategy_idx, strategy in enumerate(strategies):
                 for sat_count_idx, sat_count in enumerate(satellite_counts):
                     col_idx = strategy_idx * cols_per_strategy + sat_count_idx
-                    idle_timesteps = timestep_matrix[row_idx, col_idx]
+                    idle_seconds = timestep_matrix[row_idx, col_idx]
                     idle_pct = idle_matrix[row_idx, col_idx]
                     
-                    # Format text showing idle time and percentage
-                    idle_time = steps_to_time_string(int(idle_timesteps))
-                    value_text = f'{idle_time}\n{idle_pct:.1f}%'
+                    # Format text showing idle time in seconds and percentage
+                    value_text = f'{int(idle_seconds)}s\n{idle_pct:.1f}%'
                         
                     text = ax.text(col_idx, row_idx, value_text, ha="center", va="center", 
                                  color='black', fontweight='bold', fontsize=9)
     
     # Create comprehensive title
-    better_text = "Higher Values = Worse Performance (More Total Time Wasted)"
-    title = f'4D Visible Idle Time Matrix (Shaded by Total Visible Idle Seconds)\nVisible idle time = Connected satellites with empty buffers (active_idle_timeseries.py state 2 logic)\nSatellite counts: {", ".join([str(s) for s in satellite_counts])} | Image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\nEach cell shows: Time (hh:mm:ss) | Percentage % | {better_text}'
+    better_text = "Higher Values = Worse Performance (More Total System Idle Time)"
+    title = f'4D Total Idle Time Matrix (Overall System Utilization)\nTotal idle = Simulation time - Productive time (connected AND buffer > 0.001 MB)\nSatellite counts: {", ".join([str(s) for s in satellite_counts])} | Image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\nEach cell shows: Time (seconds) | Percentage % | {better_text}'
     
     # Titles and labels
     ax.set_title(title, fontsize=16, fontweight='bold', pad=40)
@@ -456,18 +394,18 @@ def generate_combined_idle_matrix_sats(base_folder):
     
     # Save the plot to current working directory
     if base_path.name == ".":
-        output_path = Path.cwd() / 'combined_visible_idle_matrix_sats.png'
+        output_path = Path.cwd() / 'combined_total_idle_matrix_sats.png'
     else:
-        output_path = base_path / 'combined_visible_idle_matrix_sats.png'
+        output_path = base_path / 'combined_total_idle_matrix_sats.png'
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
-    print(f"\n✅ Combined 4D visible idle matrix saved: {output_path}")
+    print(f"\n✅ Combined 4D total idle matrix saved: {output_path}")
     
     # Save the raw data with proper 4D structure
     # Print summary showing worst idle performance for each policy across all image sizes
-    print(f"\n=== COMBINED VISIBLE IDLE TIME SUMMARY ===")
-    print(f"{'Policy':<15} {'Image Size':<12} {'Worst Strategy':<25} {'Worst Sat Count':<15} {'Idle Steps':<12} {'Idle %':<12}")
-    print("-" * 105)
+    print(f"\n=== COMBINED TOTAL IDLE TIME SUMMARY ===")
+    print(f"{'Policy':<15} {'Image Size':<12} {'Worst Strategy':<25} {'Worst Sat Count':<15} {'Idle Time (s)':<15} {'Idle %':<12}")
+    print("-" * 110)
     
     for policy_idx, policy in enumerate(policies):
         for img_idx, img_size in enumerate(image_sizes):
@@ -481,12 +419,12 @@ def generate_combined_idle_matrix_sats(base_folder):
             worst_strategy = strategies[worst_strategy_idx]
             worst_sat_count = satellite_counts[worst_sat_count_idx]
             worst_idle = row_idles[worst_col_idx]
-            worst_timesteps = timestep_matrix[row_idx, worst_col_idx]
+            worst_seconds = timestep_matrix[row_idx, worst_col_idx]
             
-            print(f"{policy.upper():<15} {img_size:>7.3f} MB   {worst_strategy:<25} {worst_sat_count:>10} sat    {worst_timesteps:>8.0f}     {worst_idle:>8.1f}%")
+            print(f"{policy.upper():<15} {img_size:>7.3f} MB   {worst_strategy:<25} {worst_sat_count:>10} sat    {int(worst_seconds):>10}      {worst_idle:>8.1f}%")
 
 def main():
-    parser = argparse.ArgumentParser(description='Generate combined 4D idle time matrix across image sizes and satellite counts')
+    parser = argparse.ArgumentParser(description='Generate combined 4D total idle time matrix across image sizes and satellite counts using visibility logs')
     parser.add_argument('base_folder', help='Path to folder containing multiple analysis folders')
     args = parser.parse_args()
     

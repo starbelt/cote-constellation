@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate combined total idle time matrix (overall system utilization) using visibility logs across all image sizes"""
+"""Generate combined connected idle time matrix (satellites wasting link time) across all image sizes"""
 
 import pandas as pd
 import numpy as np
@@ -42,8 +42,8 @@ def read_config_from_zip(zip_path):
     
     return config
 
-def calculate_total_idle_from_visibility_log(strategy_folder):
-    """Calculate total idle time from visibility_log.csv"""
+def calculate_connected_idle_from_visibility_log(strategy_folder):
+    """Calculate connected idle time from visibility_log.csv"""
     policies = ["sticky", "roundrobin", "fifo", "random"]
     results = {}
     idle_data = {}
@@ -53,6 +53,10 @@ def calculate_total_idle_from_visibility_log(strategy_folder):
     if not simulation_logs_zip.exists():
         print(f"   ❌ No simulation logs found")
         return {policy: 0 for policy in policies}, {policy: 0 for policy in policies}
+    
+    # Read configuration for image size
+    config = read_config_from_zip(simulation_logs_zip)
+    image_size = config.get('image_size', 0.027)
     
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -74,33 +78,21 @@ def calculate_total_idle_from_visibility_log(strategy_folder):
                         idle_data[policy] = 0
                         continue
                     
-                    # Get simulation time span from simulation_summary.txt or default to 6 hours
-                    sim_duration = 21600  # 6 hours in seconds - this is the total simulation time
+                    # Calculate connected idle events: connected=1 AND buffer_mb <= 0.001
+                    connected_idle_events = df[(df['connected'] == 1) & (df['buffer_mb'] <= 0.001)]
                     
-                    # For total idle calculation: time when system could be productive but isn't
-                    # Total idle = (simulation time - time when connected AND buffer > threshold) / simulation time
-                    # This includes:
-                    # 1. Unconnected time (no satellite connected)
-                    # 2. Connected but empty buffer time (satellite connected but buffer <= 0.001 MB)
+                    # Count total connection events for percentage calculation
+                    total_connected_events = df[df['connected'] == 1]
                     
-                    # Count events when system is productively active: connected AND buffer > threshold
-                    productive_events = df[(df['connected'] == 1) & (df['buffer_mb'] > 0.001)]
+                    if len(total_connected_events) > 0:
+                        connected_idle_percentage = (len(connected_idle_events) / len(total_connected_events)) * 100
+                    else:
+                        connected_idle_percentage = 0
                     
-                    # Since we confirmed only 1 satellite connects at a time, each event = 1 second
-                    # For scalability to multi-GS: this counts total productive seconds across all connections
-                    actual_productive_time = len(productive_events)
+                    results[policy] = connected_idle_percentage
+                    idle_data[policy] = len(connected_idle_events)  # Store absolute count
                     
-                    # Total idle time = simulation duration - productive time
-                    total_idle_time = sim_duration - actual_productive_time
-                    
-                    # Calculate percentage
-                    total_idle_percentage = (total_idle_time / sim_duration) * 100
-                    total_idle_percentage = max(0, min(100, total_idle_percentage))
-                    
-                    results[policy] = total_idle_percentage
-                    idle_data[policy] = total_idle_time
-                    
-                    print(f"   {policy}: {actual_productive_time}/{sim_duration}s productive time = {total_idle_percentage:.1f}% total idle")
+                    print(f"   {policy}: {len(connected_idle_events)}/{len(total_connected_events)} connected idle events = {connected_idle_percentage:.1f}%")
                     
                 except Exception as e:
                     print(f"   Error processing {policy}: {e}")
@@ -134,8 +126,8 @@ def extract_satellite_count_from_folder(folder_name):
         return int(match.group(1))
     return None
 
-def generate_combined_total_idle_matrix_visibility(base_folder, satellite_count=None):
-    """Generate total idle time matrix for specific satellite count"""
+def generate_combined_connected_idle_matrix(base_folder, satellite_count=None):
+    """Generate connected idle time matrix for specific satellite count"""
     base_path = Path(base_folder)
     
     if not base_path.exists():
@@ -143,7 +135,7 @@ def generate_combined_total_idle_matrix_visibility(base_folder, satellite_count=
         return
     
     constellation_info = f" ({satellite_count} satellites)" if satellite_count else ""
-    print(f"=== Generating Total Idle Time Matrix{constellation_info} ===")
+    print(f"=== Generating Connected Idle Time Matrix{constellation_info} ===")
     print(f"📁 Base folder: {base_folder}")
     
     # Find all analysis folders
@@ -217,7 +209,7 @@ def generate_combined_total_idle_matrix_visibility(base_folder, satellite_count=
             strategy_folder = folder / strategy
             
             if strategy_folder.exists():
-                idle_percentages, idle_counts = calculate_total_idle_from_visibility_log(strategy_folder)
+                idle_percentages, idle_counts = calculate_connected_idle_from_visibility_log(strategy_folder)
                 data[size][strategy] = idle_percentages
                 all_idle_counts[size][strategy] = idle_counts
                 print(f"   ✅ {strategy}: Processed")
@@ -231,8 +223,8 @@ def generate_combined_total_idle_matrix_visibility(base_folder, satellite_count=
     total_rows = len(policies) * rows_per_policy
     
     # Create matrices for visualization
-    total_idle_matrix = np.zeros((total_rows, len(strategies)))
-    total_idle_counts_matrix = np.zeros((total_rows, len(strategies)))
+    connected_idle_matrix = np.zeros((total_rows, len(strategies)))
+    connected_idle_counts_matrix = np.zeros((total_rows, len(strategies)))
     
     # Fill matrices
     for policy_idx, policy in enumerate(policies):
@@ -240,8 +232,8 @@ def generate_combined_total_idle_matrix_visibility(base_folder, satellite_count=
             row_idx = policy_idx * rows_per_policy + size_idx
             
             for strategy_idx, strategy in enumerate(strategies):
-                total_idle_matrix[row_idx, strategy_idx] = data[size][strategy][policy]
-                total_idle_counts_matrix[row_idx, strategy_idx] = all_idle_counts[size][strategy][policy]
+                connected_idle_matrix[row_idx, strategy_idx] = data[size][strategy][policy]
+                connected_idle_counts_matrix[row_idx, strategy_idx] = all_idle_counts[size][strategy][policy]
     
     # Create comprehensive visualization
     plt.figure(figsize=(16, 12))
@@ -251,27 +243,27 @@ def generate_combined_total_idle_matrix_visibility(base_folder, satellite_count=
     from matplotlib.colors import BoundaryNorm
     import matplotlib.colors as mcolors
     
-    # Create custom colormap for total idle (orange gradient as this represents system utilization)
+    # Create custom colormap for connected idle (red gradient as this is "bad" performance)
     # Define boundaries for color mapping (0-100% range)
     boundaries = np.linspace(0, 100, 11)  # 0, 10, 20, ..., 100
     colors = [
-        '#ffffff',  # White (0% - best performance, unlikely for total idle)
-        '#fff5e6',  # Very light orange (0-10%)
-        '#ffebcc',  # Light orange (10-20%)
-        '#ffe0b3',  # Light-medium orange (20-30%)
-        '#ffd699',  # Medium orange (30-40%)
-        '#ffcc80',  # Medium-dark orange (40-50%)
-        '#ffc266',  # Dark orange (50-60%)
-        '#ffb84d',  # Darker orange (60-70%)
-        '#ffad33',  # Very dark orange (70-80%)
-        '#ffa31a',  # Almost darkest orange (80-90%)
-        '#ff9900'   # Bright orange (90-100% - expected for total idle)
+        '#ffffff',  # White (0% - best performance)
+        '#ffe6e6',  # Very light red (0-10%)
+        '#ffcccc',  # Light red (10-20%)
+        '#ffb3b3',  # Light-medium red (20-30%)
+        '#ff9999',  # Medium red (30-40%)
+        '#ff8080',  # Medium-dark red (40-50%)
+        '#ff6666',  # Dark red (50-60%)
+        '#ff4d4d',  # Darker red (60-70%)
+        '#ff3333',  # Very dark red (70-80%)
+        '#ff1a1a',  # Almost darkest red (80-90%)
+        '#ff0000'   # Bright red (90-100% - worst performance)
     ]
     cmap = mcolors.ListedColormap(colors)
     norm = BoundaryNorm(boundaries, cmap.N)
     
     # Create heatmap with custom colormap
-    im = ax.imshow(total_idle_matrix, cmap=cmap, aspect='auto', norm=norm)
+    im = ax.imshow(connected_idle_matrix, cmap=cmap, aspect='auto', norm=norm)
     
     # Create labels
     strategy_labels = [s.replace('-', ' ').title() for s in strategies]
@@ -301,30 +293,30 @@ def generate_combined_total_idle_matrix_visibility(base_folder, satellite_count=
     ax.set_yticklabels(all_y_labels, fontsize=10, fontweight='bold')
     
     # Add colorbar
-    max_value = np.max(total_idle_matrix)
-    min_value = np.min(total_idle_matrix)
+    max_value = np.max(connected_idle_matrix)
+    min_value = np.min(connected_idle_matrix)
     cbar = plt.colorbar(im, ax=ax, shrink=0.8)
-    cbar.set_label('Total Idle Time (%)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
+    cbar.set_label('Connected Idle Time (%)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
     cbar.ax.tick_params(labelsize=10)
     
-    # Add text annotations with values - show time format and percentage
+    # Add text annotations with values - show count and percentage
     for policy_idx, policy in enumerate(policies):
         for img_idx, img_size in enumerate(sorted_sizes):
             row_idx = policy_idx * rows_per_policy + img_idx
             
             for strategy_idx, strategy in enumerate(strategies):
-                total_idle_time = total_idle_counts_matrix[row_idx, strategy_idx]
-                total_idle_pct = total_idle_matrix[row_idx, strategy_idx]
+                connected_idle_count = connected_idle_counts_matrix[row_idx, strategy_idx]
+                connected_idle_pct = connected_idle_matrix[row_idx, strategy_idx]
                 
-                # Format text showing time in seconds and percentage
-                value_text = f'{int(total_idle_time)}s\n{total_idle_pct:.1f}%'
+                # Format text showing count and percentage
+                value_text = f'{int(connected_idle_count)} events\n{connected_idle_pct:.1f}%'
                     
                 text = ax.text(strategy_idx, row_idx, value_text, ha="center", va="center", 
                              color='black', fontweight='bold', fontsize=9)
     
     # Create comprehensive title
     better_text = f"{satellite_count} satellites" if satellite_count else "All satellite counts"
-    title = f'Total Idle Time (Overall System Utilization): All Image Sizes\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in sorted_sizes])}\nTime: Maximum possible connection time - actual connection time | {better_text}'
+    title = f'Connected Idle Time (Satellites Wasting Link Time): All Image Sizes\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in sorted_sizes])}\nEvents: Connected with buffer ≤ 0.001 MB | {better_text}'
     
     # Titles and labels
     ax.set_title(title, fontsize=16, fontweight='bold', pad=25)
@@ -348,15 +340,15 @@ def generate_combined_total_idle_matrix_visibility(base_folder, satellite_count=
     
     plt.tight_layout()
     
-    # Save the plot with professional naming convention
+    # Save the plot to parent directory (one level up) - matching reference style
     if satellite_count is not None:
-        output_path = f"combined_total_idle_matrix_visibility_{satellite_count}sats.png"
+        output_path = f"combined_connected_idle_matrix_{satellite_count}sats.png"
     else:
-        output_path = "combined_total_idle_matrix_visibility.png"
+        output_path = "combined_connected_idle_matrix.png"
     
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
-    print(f"\n✅ Combined total idle matrix (visibility) saved: {output_path}")
+    print(f"\n✅ Combined connected idle matrix saved: {output_path}")
     
     # Save the raw data with proper structure - matching reference style
     # Create DataFrame with multi-index for policies and image sizes
@@ -365,45 +357,45 @@ def generate_combined_total_idle_matrix_visibility(base_folder, satellite_count=
         for img_size in sorted_sizes:
             policy_image_index.append(f"{policy.upper()}_{img_size:.3f}MB")
     
-    total_idle_df = pd.DataFrame(total_idle_matrix, 
-                                index=policy_image_index, 
-                                columns=strategies)
-    total_idle_time_df = pd.DataFrame(total_idle_counts_matrix, 
-                                     index=policy_image_index, 
-                                     columns=strategies)
+    connected_idle_df = pd.DataFrame(connected_idle_matrix, 
+                                    index=policy_image_index, 
+                                    columns=strategies)
+    connected_idle_counts_df = pd.DataFrame(connected_idle_counts_matrix, 
+                                           index=policy_image_index, 
+                                           columns=strategies)
     
-    csv_path = f"combined_total_idle_visibility_data.csv"
-    total_idle_df.to_csv(csv_path)
-    print(f"✅ Combined total idle visibility data saved: {csv_path}")
+    csv_path = f"combined_connected_idle_data.csv"
+    connected_idle_df.to_csv(csv_path)
+    print(f"✅ Combined connected idle data saved: {csv_path}")
     
-    time_csv_path = f"combined_total_idle_visibility_time.csv"
-    total_idle_time_df.to_csv(time_csv_path)
-    print(f"✅ Combined total idle visibility time saved: {time_csv_path}")
+    counts_csv_path = f"combined_connected_idle_counts.csv"
+    connected_idle_counts_df.to_csv(counts_csv_path)
+    print(f"✅ Combined connected idle counts saved: {counts_csv_path}")
     
-    # Print summary showing worst total idle performance for each policy across all image sizes
-    print(f"\n=== COMBINED TOTAL IDLE TIME SUMMARY (VISIBILITY) ===")
-    print(f"{'Policy':<15} {'Image Size':<12} {'Worst Strategy':<20} {'Idle Time (s)':<15} {'Idle %':<12}")
+    # Print summary showing worst connected idle performance for each policy across all image sizes
+    print(f"\n=== COMBINED CONNECTED IDLE TIME SUMMARY ===")
+    print(f"{'Policy':<15} {'Image Size':<12} {'Worst Strategy':<20} {'Idle Events':<15} {'Idle %':<12}")
     print("-" * 90)
     
     for policy_idx, policy in enumerate(policies):
         for img_idx, img_size in enumerate(sorted_sizes):
             row_idx = policy_idx * rows_per_policy + img_idx
-            row_idles = total_idle_matrix[row_idx, :]
+            row_idles = connected_idle_matrix[row_idx, :]
             worst_strategy_idx = np.argmax(row_idles)  # Highest idle = worst
             worst_strategy = strategies[worst_strategy_idx]
             worst_idle = row_idles[worst_strategy_idx]
-            worst_time = total_idle_counts_matrix[row_idx, worst_strategy_idx]
+            worst_count = connected_idle_counts_matrix[row_idx, worst_strategy_idx]
             
-            print(f"{policy.upper():<15} {img_size:>7.3f} MB   {worst_strategy:<20} {int(worst_time):<15} {worst_idle:>8.1f}%")
+            print(f"{policy.upper():<15} {img_size:>7.3f} MB   {worst_strategy:<20} {int(worst_count):<15} {worst_idle:>8.1f}%")
 
 def main():
-    parser = argparse.ArgumentParser(description='Generate combined total idle time matrix (overall system utilization) using visibility logs across image sizes')
+    parser = argparse.ArgumentParser(description='Generate combined connected idle time matrix (satellites wasting link time) across image sizes')
     parser.add_argument('base_folder', help='Path to folder containing multiple analysis folders')
     parser.add_argument('--sats', type=int, help='Satellite count to filter by (e.g., 1, 50, 100, 200)')
     
     args = parser.parse_args()
     
-    generate_combined_total_idle_matrix_visibility(args.base_folder, args.sats)
+    generate_combined_connected_idle_matrix(args.base_folder, args.sats)
 
 if __name__ == "__main__":
     main()
