@@ -292,36 +292,43 @@ def generate_combined_idle_matrix_sats(base_folder):
     im = ax.imshow(timestep_matrix, cmap=cmap, aspect='auto')
     
     # Improved x-axis labels: Satellite counts on top, strategy names below (like y-axis structure)
+    # X-axis configuration: satellite counts on top, strategy names centered at bottom
     x_positions = []
     x_labels_top = []
-    x_labels_bottom = []
+    strategy_positions = []
+    strategy_labels = []
     
     for strategy_idx, strategy in enumerate(strategies):
+        # Calculate center position for strategy label
+        strategy_start_col = strategy_idx * cols_per_strategy
+        strategy_center_col = strategy_start_col + (cols_per_strategy - 1) / 2
+        strategy_positions.append(strategy_center_col)
+        strategy_labels.append(strategy.replace('-', ' ').title())
+        
         for sat_count_idx, sat_count in enumerate(satellite_counts):
             col_idx = strategy_idx * cols_per_strategy + sat_count_idx
             x_positions.append(col_idx)
             x_labels_top.append(str(sat_count))
-            # Only show strategy name for the first satellite count to avoid repetition
-            if sat_count_idx == 0:
-                x_labels_bottom.append(strategy.replace('-', '-').title())
-            else:
-                x_labels_bottom.append('')
     
     # Set main x-axis labels (satellite counts)
     ax.set_xticks(x_positions)
-    ax.set_xticklabels(x_labels_top, fontsize=10, fontweight='bold')
+    ax.set_xticklabels(x_labels_top, fontsize=12, fontweight='bold')
     
-    # Create secondary x-axis for strategy names
-    ax2 = ax.twiny()
-    ax2.set_xticks(x_positions)
-    ax2.set_xticklabels(x_labels_bottom, fontsize=12, fontweight='bold')
-    ax2.tick_params(axis='x', which='major', pad=15)
+    # Create secondary x-axis at bottom for centered strategy names
+    ax3 = ax.secondary_xaxis('bottom')
+    ax3.set_xticks(strategy_positions)
+    ax3.set_xticklabels(strategy_labels, fontsize=14, fontweight='bold')
+    ax3.tick_params(axis='x', which='major', pad=20)
     
-    # Y-axis labels: Policies with image sizes
+    # Y-axis labels: Policies centered vertically with image sizes
     all_y_positions = []
     all_y_labels = []
     
     for policy_idx, policy in enumerate(policies):
+        # Calculate the middle position for this policy group
+        policy_start_row = policy_idx * rows_per_policy
+        policy_middle_row = policy_start_row + (rows_per_policy - 1) / 2
+        
         for img_idx, img_size in enumerate(image_sizes):
             row_idx = policy_idx * rows_per_policy + img_idx
             all_y_positions.append(row_idx)
@@ -332,8 +339,8 @@ def generate_combined_idle_matrix_sats(base_folder):
             else:
                 size_label = f"{img_size:.0f}"  # 3, 29
             
-            # For the first row of each policy, show policy name
-            if img_idx == 0:
+            # Show policy name only at the vertical center of the policy group
+            if img_idx == len(image_sizes) // 2:  # Middle position
                 label = f"{policy.upper()}  {size_label}"
             else:
                 label = f"      {size_label}"  # Indent image sizes
@@ -341,7 +348,7 @@ def generate_combined_idle_matrix_sats(base_folder):
             all_y_labels.append(label)
     
     ax.set_yticks(all_y_positions)
-    ax.set_yticklabels(all_y_labels, fontsize=10, fontweight='bold')
+    ax.set_yticklabels(all_y_labels, fontsize=12, fontweight='bold')
     
     # Add separator lines between strategies
     for strategy_idx in range(1, len(strategies)):
@@ -355,7 +362,7 @@ def generate_combined_idle_matrix_sats(base_folder):
     
     # Add colorbar
     cbar = plt.colorbar(im, ax=ax, shrink=0.6)
-    cbar.set_label('Total Idle Time (Seconds)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
+    cbar.set_label('Total Idle Time (%)', rotation=270, labelpad=25, fontsize=14, fontweight='bold')
     cbar.ax.tick_params(labelsize=10)
     
     # Add text annotations with values - show idle time and percentage
@@ -367,21 +374,21 @@ def generate_combined_idle_matrix_sats(base_folder):
                 for sat_count_idx, sat_count in enumerate(satellite_counts):
                     col_idx = strategy_idx * cols_per_strategy + sat_count_idx
                     idle_seconds = timestep_matrix[row_idx, col_idx]
+                    productive_seconds = 21600 - idle_seconds  # Productive time = total - idle
                     idle_pct = idle_matrix[row_idx, col_idx]
                     
-                    # Format text showing idle time in seconds and percentage
-                    value_text = f'{int(idle_seconds)}s\n{idle_pct:.1f}%'
+                    # Format text showing productive/total time and idle percentage
+                    value_text = f'{int(productive_seconds)}/21600s\n{idle_pct:.1f}%'
                         
                     text = ax.text(col_idx, row_idx, value_text, ha="center", va="center", 
-                                 color='black', fontweight='bold', fontsize=9)
+                                 color='black', fontweight='bold', fontsize=10)
     
-    # Create comprehensive title
-    better_text = "Higher Values = Worse Performance (More Total System Idle Time)"
-    title = f'4D Total Idle Time Matrix (Overall System Utilization)\nTotal idle = Simulation time - Productive time (connected AND buffer > 0.001 MB)\nSatellite counts: {", ".join([str(s) for s in satellite_counts])} | Image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\nEach cell shows: Time (seconds) | Percentage % | {better_text}'
+    # Create simplified title
+    title = f'Total Idle Time (Productive Time / Total Simulation Time)'
     
     # Titles and labels
-    ax.set_title(title, fontsize=16, fontweight='bold', pad=40)
-    ax.set_xlabel('Satellite Count & Spacing Strategy', fontsize=14, fontweight='bold')
+    ax.set_title(title, fontsize=18, fontweight='bold', pad=40)
+    ax.set_xlabel('Satellite Count', fontsize=14, fontweight='bold')
     ax.set_ylabel('Scheduling Policy & Image Size', fontsize=14, fontweight='bold')
     
     # Add grid for better readability

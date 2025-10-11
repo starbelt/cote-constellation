@@ -47,6 +47,7 @@ def calculate_connected_idle_from_visibility_log(strategy_folder):
     policies = ["sticky", "roundrobin", "fifo", "random"]
     results = {}
     idle_data = {}
+    total_data = {}  # Add total connected events tracking
     
     simulation_logs_zip = strategy_folder / "simulation_logs.zip"
     
@@ -91,19 +92,24 @@ def calculate_connected_idle_from_visibility_log(strategy_folder):
                     
                     results[policy] = connected_idle_percentage
                     idle_data[policy] = len(connected_idle_events)  # Store absolute count
+                    total_data[policy] = len(total_connected_events)  # Store total connected events
                     
-                    print(f"   {policy}: {len(connected_idle_events)}/{len(total_connected_events)} connected idle events = {connected_idle_percentage:.1f}%")
+                    # Calculate active connected events for display
+                    active_connected = len(total_connected_events) - len(connected_idle_events)
+                    print(f"   {policy}: {active_connected}/{len(total_connected_events)} active connected events = {connected_idle_percentage:.1f}% connected idle")
                     
                 except Exception as e:
                     print(f"   Error processing {policy}: {e}")
                     results[policy] = 0
                     idle_data[policy] = 0
+                    total_data[policy] = 0  # Initialize total connected events
             else:
                 print(f"   ⚠️  {policy}: No visibility log found")
                 results[policy] = 0
                 idle_data[policy] = 0
+                total_data[policy] = 0  # Initialize total connected events
     
-    return results, idle_data
+    return results, idle_data, total_data
 
 def extract_image_size_from_folder(folder_name):
     """Extract image size from folder name like constellation_analysis_20251009_152226_00027_50"""
@@ -197,6 +203,7 @@ def generate_combined_connected_idle_matrix(base_folder, satellite_count=None):
     # Initialize data structure
     data = {}
     all_idle_counts = {}
+    all_total_counts = {}  # Add total connected events storage
     
     for size in sorted_sizes:
         folder = size_to_folders[size][0]  # Use first (should be only) folder for this size
@@ -204,19 +211,22 @@ def generate_combined_connected_idle_matrix(base_folder, satellite_count=None):
         
         data[size] = {}
         all_idle_counts[size] = {}
+        all_total_counts[size] = {}  # Initialize total counts for this size
         
         for strategy in strategies:
             strategy_folder = folder / strategy
             
             if strategy_folder.exists():
-                idle_percentages, idle_counts = calculate_connected_idle_from_visibility_log(strategy_folder)
+                idle_percentages, idle_counts, total_counts = calculate_connected_idle_from_visibility_log(strategy_folder)
                 data[size][strategy] = idle_percentages
                 all_idle_counts[size][strategy] = idle_counts
+                all_total_counts[size][strategy] = total_counts  # Store total counts
                 print(f"   ✅ {strategy}: Processed")
             else:
                 print(f"   ❌ {strategy}: Not found")
                 data[size][strategy] = {policy: 0 for policy in policies}
                 all_idle_counts[size][strategy] = {policy: 0 for policy in policies}
+                all_total_counts[size][strategy] = {policy: 0 for policy in policies}  # Initialize total counts
     
     # Create single comprehensive matrix
     rows_per_policy = len(sorted_sizes)
@@ -225,6 +235,7 @@ def generate_combined_connected_idle_matrix(base_folder, satellite_count=None):
     # Create matrices for visualization
     connected_idle_matrix = np.zeros((total_rows, len(strategies)))
     connected_idle_counts_matrix = np.zeros((total_rows, len(strategies)))
+    total_connected_matrix = np.zeros((total_rows, len(strategies)))  # Add total connected events matrix
     
     # Fill matrices
     for policy_idx, policy in enumerate(policies):
@@ -234,6 +245,7 @@ def generate_combined_connected_idle_matrix(base_folder, satellite_count=None):
             for strategy_idx, strategy in enumerate(strategies):
                 connected_idle_matrix[row_idx, strategy_idx] = data[size][strategy][policy]
                 connected_idle_counts_matrix[row_idx, strategy_idx] = all_idle_counts[size][strategy][policy]
+                total_connected_matrix[row_idx, strategy_idx] = all_total_counts[size][strategy][policy]  # Fill total connected events
     
     # Create comprehensive visualization
     plt.figure(figsize=(16, 12))
@@ -299,24 +311,28 @@ def generate_combined_connected_idle_matrix(base_folder, satellite_count=None):
     cbar.set_label('Connected Idle Time (%)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
     cbar.ax.tick_params(labelsize=10)
     
-    # Add text annotations with values - show count and percentage
+    # Add text annotations with values - show active/total format
     for policy_idx, policy in enumerate(policies):
         for img_idx, img_size in enumerate(sorted_sizes):
             row_idx = policy_idx * rows_per_policy + img_idx
             
             for strategy_idx, strategy in enumerate(strategies):
                 connected_idle_count = connected_idle_counts_matrix[row_idx, strategy_idx]
+                total_connected_count = total_connected_matrix[row_idx, strategy_idx]
                 connected_idle_pct = connected_idle_matrix[row_idx, strategy_idx]
                 
-                # Format text showing count and percentage
-                value_text = f'{int(connected_idle_count)} events\n{connected_idle_pct:.1f}%'
+                # Calculate active connected events (total - idle)
+                active_connected = total_connected_count - connected_idle_count
+                
+                # Format text showing active/total connected events and idle percentage
+                value_text = f'{int(active_connected)}/{int(total_connected_count)}\n{connected_idle_pct:.1f}%'
                     
                 text = ax.text(strategy_idx, row_idx, value_text, ha="center", va="center", 
                              color='black', fontweight='bold', fontsize=9)
     
     # Create comprehensive title
     better_text = f"{satellite_count} satellites" if satellite_count else "All satellite counts"
-    title = f'Connected Idle Time (Satellites Wasting Link Time): All Image Sizes\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in sorted_sizes])}\nEvents: Connected with buffer ≤ 0.001 MB | {better_text}'
+    title = f'Connected Idle Time (Active Connected / Total Connected): All Image Sizes\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in sorted_sizes])}\nEvents: Connected with buffer ≤ 0.001 MB | {better_text}'
     
     # Titles and labels
     ax.set_title(title, fontsize=16, fontweight='bold', pad=25)

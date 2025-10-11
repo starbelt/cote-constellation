@@ -112,12 +112,13 @@ def calculate_efficiency_for_strategy(strategy_folder):
     policies = ["sticky", "roundrobin", "fifo", "random"]
     results = {}
     download_data = {}
+    accumulated_data = {}  # Add total accumulated data tracking
     
     simulation_logs_zip = strategy_folder / "simulation_logs.zip"
     
     if not simulation_logs_zip.exists():
         print(f"   ❌ No simulation logs found")
-        return {policy: 0 for policy in policies}, {policy: 0 for policy in policies}
+        return {policy: 0 for policy in policies}, {policy: 0 for policy in policies}, {policy: 0 for policy in policies}
     
     # Read configuration for image size
     config = read_config_from_zip(simulation_logs_zip)
@@ -147,11 +148,13 @@ def calculate_efficiency_for_strategy(strategy_folder):
                 
                 results[policy] = efficiency
                 download_data[policy] = total_downloaded
+                accumulated_data[policy] = total_accumulated  # Store total accumulated
             else:
                 results[policy] = 0
                 download_data[policy] = 0
+                accumulated_data[policy] = 0  # Store zero for missing data
     
-    return results, download_data
+    return results, download_data, accumulated_data
 
 def extract_image_size_from_folder(folder_name):
     """Extract image size from folder name like constellation_analysis_20251007_193320_28000_50"""
@@ -250,6 +253,7 @@ def generate_combined_efficiency_matrix(base_folder, satellite_count=None):
     # Calculate efficiency for each image size and strategy
     all_efficiency_data = {}
     all_download_data = {}
+    all_accumulated_data = {}  # Add accumulated data tracking
     image_sizes = []
     
     for analysis_folder in analysis_folders:
@@ -262,20 +266,23 @@ def generate_combined_efficiency_matrix(base_folder, satellite_count=None):
         
         efficiency_data = {}
         download_data = {}
+        accumulated_data = {}  # Track accumulated data
         
         for strategy in strategies:
             strategy_folder = analysis_folder / strategy
             
             if strategy_folder.exists():
-                efficiency_data[strategy], download_data[strategy] = calculate_efficiency_for_strategy(strategy_folder)
+                efficiency_data[strategy], download_data[strategy], accumulated_data[strategy] = calculate_efficiency_for_strategy(strategy_folder)
                 print(f"   ✅ {strategy}: Processed")
             else:
                 print(f"   ❌ {strategy}: Not found")
                 efficiency_data[strategy] = {policy: 0 for policy in policies}
                 download_data[strategy] = {policy: 0 for policy in policies}
+                accumulated_data[strategy] = {policy: 0 for policy in policies}  # Initialize accumulated data
         
         all_efficiency_data[img_size] = efficiency_data
         all_download_data[img_size] = download_data
+        all_accumulated_data[img_size] = accumulated_data  # Store accumulated data
     
     if not image_sizes:
         print("❌ No valid analysis folders found")
@@ -288,6 +295,7 @@ def generate_combined_efficiency_matrix(base_folder, satellite_count=None):
     
     efficiency_matrix = np.zeros((total_rows, len(strategies)))
     download_matrix = np.zeros((total_rows, len(strategies)))
+    accumulated_matrix = np.zeros((total_rows, len(strategies)))  # Add accumulated data matrix
     
     # Fill the matrix: each policy gets 4 rows (one per image size)
     for policy_idx, policy in enumerate(policies):
@@ -297,19 +305,23 @@ def generate_combined_efficiency_matrix(base_folder, satellite_count=None):
             for strategy_idx, strategy in enumerate(strategies):
                 efficiency = all_efficiency_data[img_size][strategy][policy]
                 download = all_download_data[img_size][strategy][policy]
+                accumulated = all_accumulated_data[img_size][strategy][policy]  # Get accumulated data
                 
                 efficiency_matrix[row_idx, strategy_idx] = efficiency
                 download_matrix[row_idx, strategy_idx] = download
+                accumulated_matrix[row_idx, strategy_idx] = accumulated  # Store accumulated data
     
     # Create the plot with adjusted size for the larger matrix
     fig, ax = plt.subplots(figsize=(16, 14))
     
-    # Use Greens colormap (higher efficiency = better = darker green)
-    cmap = 'Greens'
-    better_text = "Higher Values = Better Performance"
+    # Use Reds colormap for inefficiency (higher inefficiency = worse = darker red)
+    # Create inefficiency matrix for consistent coloring with other scripts
+    inefficiency_matrix = 100 - efficiency_matrix
+    cmap = 'Reds'
+    better_text = "Lower Values = Better Performance (Less Waste)"
     
-    # Create the heatmap using imshow
-    im = ax.imshow(efficiency_matrix, cmap=cmap, aspect='auto')
+    # Create the heatmap using imshow with inefficiency for coloring
+    im = ax.imshow(inefficiency_matrix, cmap=cmap, aspect='auto', vmin=0, vmax=100)
     
     # Set ticks and labels - strategies on X, policies with image sizes on Y
     strategy_labels = [s.replace('-', '-').title() for s in strategies]
@@ -346,32 +358,36 @@ def generate_combined_efficiency_matrix(base_folder, satellite_count=None):
     max_value = np.max(efficiency_matrix)
     min_value = np.min(efficiency_matrix)
     cbar = plt.colorbar(im, ax=ax, shrink=0.8)
-    cbar.set_label('Download Efficiency (%)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
+    cbar.set_label('Download Inefficiency (%)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
     cbar.ax.tick_params(labelsize=10)
     
-    # Add text annotations with values - show download and efficiency (no need for image size since it's on Y-axis)
+    # Add text annotations with values - show downloaded/accumulated format
     for policy_idx, policy in enumerate(policies):
         for img_idx, img_size in enumerate(image_sizes):
             row_idx = policy_idx * rows_per_policy + img_idx
             
             for strategy_idx, strategy in enumerate(strategies):
-                download_gb = download_matrix[row_idx, strategy_idx] / 1000  # Convert MB to GB
+                downloaded_mb = download_matrix[row_idx, strategy_idx]
+                accumulated_mb = accumulated_matrix[row_idx, strategy_idx]
                 efficiency_pct = efficiency_matrix[row_idx, strategy_idx]
                 
-                # Format text showing just download and efficiency (cleaner without image size)
-                if download_gb >= 1000:  # Use TB for very large values
-                    value_text = f'{download_gb/1000:.1f} TB\n{efficiency_pct:.1f}%'
-                elif download_gb >= 1:
-                    value_text = f'{download_gb:.1f} GB\n{efficiency_pct:.1f}%'
+                # Calculate inefficiency percentage for consistent coloring
+                inefficiency_pct = 100 - efficiency_pct
+                
+                # Format text showing downloaded/accumulated and inefficiency percentage
+                if accumulated_mb >= 1000:  # Use GB for large values
+                    downloaded_gb = downloaded_mb / 1000
+                    accumulated_gb = accumulated_mb / 1000
+                    value_text = f'{downloaded_gb:.1f}/{accumulated_gb:.1f} GB\n{inefficiency_pct:.1f}%'
                 else:
-                    value_text = f'{download_matrix[row_idx, strategy_idx]:.0f} MB\n{efficiency_pct:.1f}%'
+                    value_text = f'{downloaded_mb:.0f}/{accumulated_mb:.0f} MB\n{inefficiency_pct:.1f}%'
                     
                 text = ax.text(strategy_idx, row_idx, value_text, ha="center", va="center", 
                              color='black', fontweight='bold', fontsize=9)
     
     # Create comprehensive title
     constellation_title = f" ({satellite_count} Satellite Constellation)" if satellite_count else ""
-    title = f'Data Download Efficiency{constellation_title}: All Image Sizes by Policy × Strategy\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\n{better_text}'
+    title = f'Data Download Efficiency{constellation_title} (Downloaded / Total Accumulated)\nEach cell shows 4 image sizes: {", ".join([f"{s:.3f}MB" for s in image_sizes])}\n{better_text}'
     
     # Titles and labels
     ax.set_title(title, fontsize=16, fontweight='bold', pad=25)
