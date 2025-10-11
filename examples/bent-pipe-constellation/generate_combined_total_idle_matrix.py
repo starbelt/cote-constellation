@@ -358,28 +358,6 @@ def generate_combined_total_idle_matrix_visibility(base_folder, satellite_count=
     plt.close()
     print(f"\n✅ Combined total idle matrix (visibility) saved: {output_path}")
     
-    # Save the raw data with proper structure - matching reference style
-    # Create DataFrame with multi-index for policies and image sizes
-    policy_image_index = []
-    for policy in policies:
-        for img_size in sorted_sizes:
-            policy_image_index.append(f"{policy.upper()}_{img_size:.3f}MB")
-    
-    total_idle_df = pd.DataFrame(total_idle_matrix, 
-                                index=policy_image_index, 
-                                columns=strategies)
-    total_idle_time_df = pd.DataFrame(total_idle_counts_matrix, 
-                                     index=policy_image_index, 
-                                     columns=strategies)
-    
-    csv_path = f"combined_total_idle_visibility_data.csv"
-    total_idle_df.to_csv(csv_path)
-    print(f"✅ Combined total idle visibility data saved: {csv_path}")
-    
-    time_csv_path = f"combined_total_idle_visibility_time.csv"
-    total_idle_time_df.to_csv(time_csv_path)
-    print(f"✅ Combined total idle visibility time saved: {time_csv_path}")
-    
     # Print summary showing worst total idle performance for each policy across all image sizes
     print(f"\n=== COMBINED TOTAL IDLE TIME SUMMARY (VISIBILITY) ===")
     print(f"{'Policy':<15} {'Image Size':<12} {'Worst Strategy':<20} {'Idle Time (s)':<15} {'Idle %':<12}")

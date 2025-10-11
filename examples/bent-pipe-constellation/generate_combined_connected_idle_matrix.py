@@ -350,28 +350,6 @@ def generate_combined_connected_idle_matrix(base_folder, satellite_count=None):
     plt.close()
     print(f"\n✅ Combined connected idle matrix saved: {output_path}")
     
-    # Save the raw data with proper structure - matching reference style
-    # Create DataFrame with multi-index for policies and image sizes
-    policy_image_index = []
-    for policy in policies:
-        for img_size in sorted_sizes:
-            policy_image_index.append(f"{policy.upper()}_{img_size:.3f}MB")
-    
-    connected_idle_df = pd.DataFrame(connected_idle_matrix, 
-                                    index=policy_image_index, 
-                                    columns=strategies)
-    connected_idle_counts_df = pd.DataFrame(connected_idle_counts_matrix, 
-                                           index=policy_image_index, 
-                                           columns=strategies)
-    
-    csv_path = f"combined_connected_idle_data.csv"
-    connected_idle_df.to_csv(csv_path)
-    print(f"✅ Combined connected idle data saved: {csv_path}")
-    
-    counts_csv_path = f"combined_connected_idle_counts.csv"
-    connected_idle_counts_df.to_csv(counts_csv_path)
-    print(f"✅ Combined connected idle counts saved: {counts_csv_path}")
-    
     # Print summary showing worst connected idle performance for each policy across all image sizes
     print(f"\n=== COMBINED CONNECTED IDLE TIME SUMMARY ===")
     print(f"{'Policy':<15} {'Image Size':<12} {'Worst Strategy':<20} {'Idle Events':<15} {'Idle %':<12}")
