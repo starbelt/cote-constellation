@@ -189,135 +189,80 @@ def extract_archive_data(strategy, archive_base_path):
         return None
 
 def parse_communication_data_optimized(strategy, policy, temp_dir):
-    """Optimized parsing with sampling for faster processing and proper buffer states."""
+    """Efficient parsing using visibility_log.csv - pre-filter to connected events only for accurate, fast plotting."""
     policy_dir = temp_dir / policy
-    tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
+    visibility_log_file = policy_dir / "visibility_log.csv"
     
-    if not tx_rx_file.exists():
-        print(f"    Warning: No tx-rx file found for {strategy}_{policy}")
+    if not visibility_log_file.exists():
+        print(f"    Warning: No visibility_log.csv found for {strategy}_{policy}")
         return None, None
         
-    # Read with sampling for speed (every 10th row for large files)
     print(f"    Processing {strategy}_{policy}...")
     
-    # First, get file size to decide sampling
-    file_size = tx_rx_file.stat().st_size
-    if file_size > 10_000_000:  # If file > 10MB, sample every 10th row
-        sample_rows = list(range(0, 100000, 10))  # Sample first 10k rows, every 10th
-        df = pd.read_csv(tx_rx_file, skiprows=lambda x: x not in sample_rows and x != 0)
-    else:
-        df = pd.read_csv(tx_rx_file)
+    # Read visibility log - NO SAMPLING for accuracy!
+    # We'll filter to connected events only which gives us the small dataset we need
+    df = pd.read_csv(visibility_log_file)
     
-    # Handle the empty third column
-    if len(df.columns) == 3:
-        df = df.iloc[:, :2]
-    
-    if len(df) <= 1:
-        print(f"    Warning: Empty data file for {strategy}_{policy}")
+    if len(df) == 0:
+        print(f"    Warning: Empty visibility log for {strategy}_{policy}")
         return None, None
-        
-    df.columns = ['timestamp', 'satellite']
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
     
-    # Convert to relative time (hours from start)
+    # Parse timestamp and convert to hours
+    df['timestamp'] = pd.to_datetime(df['time'])
     start_time = df['timestamp'].min()
     df['hours'] = (df['timestamp'] - start_time).dt.total_seconds() / 3600
     
-    # Ground station state
-    df['ground_station_active'] = df['satellite'].apply(lambda x: 0 if pd.isna(x) or x == 'None' else 1)
+    # Find satellites that had connected=1 at any point
+    df_connected = df[df['connected'] == 1].copy()
+    print(f"    Filtered to {len(df_connected)} connected events (from {len(df)} total)")
     
-    # Find most active satellites (show ALL satellites, not just top 5)
-    active_data = df[df['satellite'] != 'None']
-    if len(active_data) == 0:
-        return df[['hours', 'ground_station_active']], {}
-        
-    satellite_counts = active_data['satellite'].value_counts()
-    all_sats = satellite_counts.index.tolist()  # Get ALL satellites instead of limiting
+    connected_sats = df_connected['sat_id'].unique()
     
-    # Read buffer files to get buffer state (with sampling)
-    buffer_files = list(policy_dir.glob("meas-MB-buffered-sat-*.csv"))
-    buffer_data = {}
+    if len(connected_sats) == 0:
+        # No connections - return GS timeline showing all idle
+        all_hours = df['hours'].unique()
+        gs_timeline = pd.DataFrame({'hours': sorted(all_hours)})
+        gs_timeline['ground_station_active'] = 0
+        return gs_timeline[['hours', 'ground_station_active']], {}
     
-    for buffer_file in buffer_files:
-        # Extract satellite ID from filename: meas-MB-buffered-sat-0060518000.csv
-        sat_id_match = buffer_file.stem.split('-')[-1]  # Gets "0060518000"
-        if len(sat_id_match) >= 10:
-            # Convert to expected format: 60518000-0
-            sat_base = sat_id_match[-8:]  # Last 8 digits
-            sat_id = f"{sat_base}-0"
-            
-            if sat_id in all_sats:
-                try:
-                    # Sample buffer file too for performance
-                    buffer_file_size = buffer_file.stat().st_size
-                    if buffer_file_size > 10_000_000:  # Sample large buffer files
-                        df_buffer = pd.read_csv(buffer_file, skiprows=lambda x: x not in sample_rows and x != 0)
-                    else:
-                        df_buffer = pd.read_csv(buffer_file)
-                        
-                    if len(df_buffer.columns) >= 2:
-                        df_buffer.columns = ['timestamp', 'buffer_mb'] + list(df_buffer.columns[2:])
-                        df_buffer['timestamp'] = pd.to_datetime(df_buffer['timestamp'])
-                        df_buffer['hours'] = (df_buffer['timestamp'] - start_time).dt.total_seconds() / 3600
-                        buffer_data[sat_id] = df_buffer[['hours', 'buffer_mb']]
-                except Exception:
-                    # Skip buffer file if it can't be read
-                    pass
-    
-    # Create satellite data with proper connection and buffer states
+    # Create complete timeline for each satellite that had connections
+    # This includes both connected AND disconnected states for proper step plotting
     satellite_data = {}
-    for sat in all_sats:
-        # Create connection state: 1 when this satellite is connected, 0 otherwise
-        sat_connected = df['satellite'].apply(lambda x: 1 if x == sat else 0)
-        
-        # Create base data structure
-        sat_data = df[['hours']].copy()
-        sat_data[f'sat_{sat}_connected'] = sat_connected
-        
-        # Add buffer information if available
-        if sat in buffer_data:
-            # Merge buffer data with nearest time matching
-            sat_data = pd.merge_asof(
-                sat_data.sort_values('hours'),
-                buffer_data[sat].sort_values('hours'),
-                on='hours', direction='nearest'
-            )
-            sat_data['buffer_mb'] = sat_data['buffer_mb'].fillna(0)
-            
-            # Create proper buffer-aware states
-            sat_data[f'sat_{sat}_state'] = 0  # disconnected
-            connected_mask = sat_data[f'sat_{sat}_connected'] > 0
-            
-            # For each connected period, check if satellite has buffer to drain
-            actively_draining = np.zeros(len(sat_data), dtype=bool)
-            
-            for i in range(len(sat_data)):
-                if connected_mask.iloc[i]:  # If connected at this timestep
-                    # Check current buffer
-                    current_buffer = sat_data['buffer_mb'].iloc[i]
-                    
-                    # Also check previous timestep buffer (satellite may connect with existing buffer)
-                    prev_buffer = 0
-                    if i > 0:
-                        prev_buffer = sat_data['buffer_mb'].iloc[i-1]
-                    
-                    # Actively draining if: has current buffer OR had previous buffer (draining it now)
-                    if current_buffer > 0.001 or prev_buffer > 0.001:  # Small threshold for floating point
-                        actively_draining[i] = True
-            
-            # State 1: Connected AND actively draining (has buffer to transmit)
-            sat_data.loc[connected_mask & actively_draining, f'sat_{sat}_state'] = 1
-            
-            # State 2: Connected BUT no buffer to drain (idle)
-            sat_data.loc[connected_mask & ~actively_draining, f'sat_{sat}_state'] = 2
-        else:
-            # No buffer data available, just use connection state
-            sat_data['buffer_mb'] = 0
-            sat_data[f'sat_{sat}_state'] = sat_connected  # Just use connection state if no buffer data
-        
-        satellite_data[sat] = sat_data
     
-    return df[['hours', 'ground_station_active']], satellite_data
+    for sat_id in connected_sats:
+        # Get ALL events for this satellite (connected and disconnected)
+        # This ensures we have data points for the "line down" when disconnecting
+        sat_all_events = df[df['sat_id'] == sat_id][['hours', 'connected', 'buffer_mb']].copy()
+        
+        if len(sat_all_events) == 0:
+            continue
+        
+        # Sort by time
+        sat_all_events = sat_all_events.sort_values('hours').reset_index(drop=True)
+        
+        # Set connection state
+        sat_all_events[f'sat_{sat_id}_connected'] = sat_all_events['connected']
+        
+        # Determine state: 0=disconnected, 1=connected+draining, 2=connected+idle
+        sat_all_events[f'sat_{sat_id}_state'] = 0  # default to disconnected
+        
+        # Connected with buffer - actively draining (state 1)
+        draining_mask = (sat_all_events['connected'] == 1) & (sat_all_events['buffer_mb'] > 0.001)
+        sat_all_events.loc[draining_mask, f'sat_{sat_id}_state'] = 1
+        
+        # Connected without buffer - idle/hogging (state 2)
+        idle_mask = (sat_all_events['connected'] == 1) & (sat_all_events['buffer_mb'] <= 0.001)
+        sat_all_events.loc[idle_mask, f'sat_{sat_id}_state'] = 2
+        
+        satellite_data[sat_id] = sat_all_events
+    
+    # Ground station timeline: active when ANY satellite is connected
+    gs_active_hours = df_connected['hours'].unique()
+    all_hours = df['hours'].unique()
+    gs_timeline = pd.DataFrame({'hours': sorted(all_hours)})
+    gs_timeline['ground_station_active'] = gs_timeline['hours'].isin(gs_active_hours).astype(int)
+    
+    return gs_timeline[['hours', 'ground_station_active']], satellite_data
 
 def create_strategy_chart_optimized(strategy, output_dir, archive_base_path=None):
     """Create a single strategy chart with 4 policies (optimized)."""
@@ -413,6 +358,10 @@ def create_strategy_chart_optimized(strategy, output_dir, archive_base_path=None
                 # Get a unique color for this satellite
                 sat_color = colors['satellites'][j % len(colors['satellites'])]
                 
+                # Format satellite ID for display
+                sat_id_str = str(sat_id)
+                sat_label = sat_id_str[-1] if len(sat_id_str) > 10 else sat_id_str
+                
                 state_col = f'sat_{sat_id}_state'
                 if state_col in sat_data.columns:
                     # For connected with buffer (state 1) - Use satellite's unique color (actively draining)
@@ -423,7 +372,7 @@ def create_strategy_chart_optimized(strategy, output_dir, archive_base_path=None
                         spike_line = spike_line + satellite_y
                         ax.plot(sat_data['hours'], spike_line, 
                                color=sat_color, linewidth=2.5, alpha=0.9, drawstyle='steps-post',
-                               label=f'Sat {sat_id[-1] if len(sat_id) > 10 else sat_id} (Draining)' if policy_idx == 0 else "")
+                               label=f'Sat {sat_label} (Draining)' if policy_idx == 0 else "")
                     
                     # For connected without buffer (state 2) - Use grey for idle/hogging state
                     idle_mask = sat_data[state_col] == 2
@@ -434,7 +383,7 @@ def create_strategy_chart_optimized(strategy, output_dir, archive_base_path=None
                         spike_line_grey = spike_line_grey + satellite_y
                         ax.plot(sat_data['hours'], spike_line_grey, 
                                color='#A0A0A0', linewidth=2.5, alpha=0.7, drawstyle='steps-post',
-                               label=f'Sat {sat_id[-1] if len(sat_id) > 10 else sat_id} (Idle)' if policy_idx == 0 else "")
+                               label=f'Sat {sat_label} (Idle)' if policy_idx == 0 else "")
                 else:
                     # Fallback: simple connection state with unique satellite color
                     connected_col = f'sat_{sat_id}_connected'
@@ -443,7 +392,7 @@ def create_strategy_chart_optimized(strategy, output_dir, archive_base_path=None
                         ax.plot(sat_data['hours'], spike_line, 
                                color=sat_color, 
                                linewidth=2, alpha=0.8, drawstyle='steps-post',
-                               label=f'Sat {sat_id[-1] if len(sat_id) > 10 else sat_id}' if policy_idx == 0 else "")
+                               label=f'Sat {sat_label}' if policy_idx == 0 else "")
             
             # Formatting
             ax.set_ylabel(f'{policy.upper()}\nPolicy', fontweight='bold', fontsize=16)  # Larger font for bigger chart

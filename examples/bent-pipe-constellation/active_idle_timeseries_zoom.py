@@ -85,54 +85,46 @@ def extract_archive_data(strategy, archive_base_path):
         return None
 
 def parse_communication_data_simple(strategy, policy, temp_dir, start_time_str=None, duration_seconds=None):
-    """Simplified parsing for testing with optional time filtering."""
+    """Efficient parsing using visibility_log.csv with optional time filtering."""
     policy_dir = temp_dir / policy
-    tx_rx_file = policy_dir / "meas-downlink-tx-rx.csv"
+    visibility_log_file = policy_dir / "visibility_log.csv"
     
-    if not tx_rx_file.exists():
-        print(f"    Warning: No tx-rx file found: {tx_rx_file}")
+    if not visibility_log_file.exists():
+        print(f"    Warning: No visibility_log.csv found: {visibility_log_file}")
         return None, None, None
         
-    # Read the data - if no time filtering specified, limit to first 1000 rows for testing
-    print(f"    Reading {tx_rx_file}...")
-    if start_time_str is None and duration_seconds is None:
-        df = pd.read_csv(tx_rx_file, nrows=1000)  # Default behavior
-        print("    Using default: first 1000 rows for testing")
-    else:
-        df = pd.read_csv(tx_rx_file)  # Read full file for time filtering
-        print(f"    Read full file ({len(df)} rows) for time filtering")
+    # Read visibility log - accurate and efficient
+    print(f"    Reading {visibility_log_file}...")
+    df = pd.read_csv(visibility_log_file)
     
-    # Handle the empty third column
-    if len(df.columns) == 3:
-        df = df.iloc[:, :2]
-    
-    if len(df) <= 1:
-        print(f"    Warning: Empty data file")
+    if len(df) == 0:
+        print(f"    Warning: Empty visibility log")
         return None, None, None
-        
-    df.columns = ['timestamp', 'satellite']
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
     
-    # Filter by time range if specified
+    # The 'time' column is already in seconds since start
+    # Convert to hours for plotting
+    df['hours'] = df['time'] / 3600.0
+    
+    # Filter by time range if specified (using seconds)
     if start_time_str is not None:
         try:
-            # Parse start time (format: HH:MM:SS)
+            # Parse start time (format: HH:MM:SS) and convert to seconds since midnight
             start_hour, start_min, start_sec = map(int, start_time_str.split(':'))
+            start_time_seconds = start_hour * 3600 + start_min * 60 + start_sec
             
-            # Get the simulation start date and apply the specified time
-            sim_start_date = df['timestamp'].min().date()
-            filter_start_time = datetime.combine(sim_start_date, 
-                                                datetime.min.time().replace(hour=start_hour, 
-                                                                          minute=start_min, 
-                                                                          second=start_sec))
+            # The simulation starts at 13:03:20, which is 13*3600 + 3*60 + 20 = 46,940 seconds since midnight
+            # But the 'time' column starts at 0 for the simulation start
+            # So we need to find the offset from simulation start to the requested start time
+            sim_start_seconds = 13 * 3600 + 3 * 60 + 20  # 13:03:20
+            filter_start_offset = start_time_seconds - sim_start_seconds
             
             if duration_seconds:
-                filter_end_time = filter_start_time + timedelta(seconds=duration_seconds)
-                print(f"    Filtering data from {filter_start_time.strftime('%H:%M:%S')} to {filter_end_time.strftime('%H:%M:%S')} ({duration_seconds} seconds)")
-                df = df[(df['timestamp'] >= filter_start_time) & (df['timestamp'] <= filter_end_time)]
+                filter_end_offset = filter_start_offset + duration_seconds
+                print(f"    Filtering data from {start_time_str} to +{duration_seconds}s (offsets {filter_start_offset} to {filter_end_offset} seconds)")
+                df = df[(df['time'] >= filter_start_offset) & (df['time'] <= filter_end_offset)]
             else:
-                print(f"    Filtering data from {filter_start_time.strftime('%H:%M:%S')} onwards")
-                df = df[df['timestamp'] >= filter_start_time]
+                print(f"    Filtering data from {start_time_str} onwards (offset {filter_start_offset} seconds)")
+                df = df[df['time'] >= filter_start_offset]
                 
             if len(df) == 0:
                 print(f"    Warning: No data found in specified time range")
@@ -142,59 +134,57 @@ def parse_communication_data_simple(strategy, policy, temp_dir, start_time_str=N
             print(f"    Warning: Error parsing time filter '{start_time_str}': {e}")
             print("    Using full dataset")
     
-    # Convert to relative time (hours from start)
-    start_time = df['timestamp'].min()
-    df['hours'] = (df['timestamp'] - start_time).dt.total_seconds() / 3600
+    # Get simulation start time from first timestamp if available
+    start_time = None
+    if 'freshness_timestamp' in df.columns:
+        valid_timestamps = df[df['freshness_timestamp'].notna()]['freshness_timestamp']
+        if len(valid_timestamps) > 0:
+            start_time = pd.to_datetime(valid_timestamps.iloc[0])
     
-    # Ground station state
-    df['ground_station_active'] = df['satellite'].apply(lambda x: 0 if pd.isna(x) or x == 'None' else 1)
+    # Find all satellites that had connected=1 at any point
+    df_connected = df[df['connected'] == 1].copy()
+    print(f"    Filtered to {len(df_connected)} connected events (from {len(df)} total)")
     
-    # Find active satellites
-    active_data = df[df['satellite'] != 'None']
-    if len(active_data) == 0:
-        return df[['hours', 'ground_station_active']], {}
-        
-    # Get all satellites that connect during this window
-    satellite_counts = active_data['satellite'].value_counts()
-    all_active_sats = satellite_counts.index.tolist()
+    connected_sats = df_connected['sat_id'].unique()
     
-    print(f"    Found {len(satellite_counts)} satellites, using all {len(all_active_sats)}")
+    if len(connected_sats) == 0:
+        # No connections, return empty
+        all_hours = df['hours'].unique()
+        gs_timeline = pd.DataFrame({'hours': sorted(all_hours)})
+        gs_timeline['ground_station_active'] = 0
+        return gs_timeline[['hours', 'ground_station_active']], {}, start_time
     
-    # Create simplified satellite data with buffer state simulation
+    print(f"    Found {len(connected_sats)} satellites")
+    
+    # Create complete timeline for each satellite that had connections
+    # This includes both connected and disconnected states for proper step plotting
     satellite_data = {}
-    for sat in all_active_sats:
-        sat_connected = df['satellite'].apply(lambda x: 1 if x == sat else 0)
-        sat_data = df[['hours']].copy()
-        sat_data[f'sat_{sat}_connected'] = sat_connected
-        
-        # Simulate buffer state: satellites drain buffer quickly then stay connected with buffer=0
-        sat_data[f'sat_{sat}_has_buffer'] = 0  # Default: no buffer
-        
-        # Find connection start points
-        connected_diff = sat_connected.diff()
-        connection_starts = sat_data[connected_diff == 1].index
-        
-        # For each connection, assume buffer drains quickly (first 10-20% of connection time)
-        for start_idx in connection_starts:
-            # Find when this connection period ends
-            remaining_data = sat_data.loc[start_idx:]
-            disconnection = remaining_data[remaining_data[f'sat_{sat}_connected'] == 0]
-            
-            if len(disconnection) > 0:
-                end_idx = disconnection.index[0]
-            else:
-                end_idx = len(sat_data) - 1
-            
-            # Buffer drains in first 15% of connection time, then buffer=0 (hogging)
-            connection_duration = end_idx - start_idx
-            buffer_duration = max(2, int(connection_duration * 0.15))  # 15% with buffer
-            
-            # Set buffer=1 for early part of connection
-            sat_data.loc[start_idx:start_idx + buffer_duration, f'sat_{sat}_has_buffer'] = 1
-        
-        satellite_data[sat] = sat_data
     
-    return df[['hours', 'ground_station_active']], satellite_data, start_time
+    for sat_id in connected_sats:
+        # Get ALL events for this satellite (connected and disconnected)
+        sat_all_events = df[df['sat_id'] == sat_id][['hours', 'connected', 'buffer_mb']].copy()
+        
+        if len(sat_all_events) == 0:
+            continue
+        
+        # Sort by time
+        sat_all_events = sat_all_events.sort_values('hours').reset_index(drop=True)
+        
+        # Set connection state
+        sat_all_events[f'sat_{sat_id}_connected'] = sat_all_events['connected']
+        
+        # Buffer state: 1 if buffer > 0.001, 0 if empty (only meaningful when connected)
+        sat_all_events[f'sat_{sat_id}_has_buffer'] = (sat_all_events['buffer_mb'] > 0.001).astype(int)
+        
+        satellite_data[sat_id] = sat_all_events
+    
+    # Ground station timeline: active when ANY satellite is connected
+    gs_active_hours = df_connected['hours'].unique()
+    all_hours = df['hours'].unique()
+    gs_timeline = pd.DataFrame({'hours': sorted(all_hours)})
+    gs_timeline['ground_station_active'] = gs_timeline['hours'].isin(gs_active_hours).astype(int)
+    
+    return gs_timeline[['hours', 'ground_station_active']], satellite_data, start_time
 
 def test_single_strategy(strategy="close-spaced", policy="sticky", start_time_str=None, duration_seconds=None, constellation_folder=None):
     """Test processing a single strategy with optional parameters."""
@@ -283,12 +273,14 @@ def test_single_strategy(strategy="close-spaced", policy="sticky", start_time_st
                     if sat_data.iloc[j][f'sat_{sat_id}_connected'] == 1:  # Connected
                         if sat_data.iloc[j][buffer_col] == 1:  # Has buffer
                             color = sat_color
-                            label = f'Sat {sat_id[-1] if len(sat_id) > 10 else sat_id} (Active)' if not active_labeled else ''
+                            sat_label = str(sat_id)[-1] if len(str(sat_id)) > 10 else str(sat_id)
+                            label = f'Sat {sat_label} (Active)' if not active_labeled else ''
                             if not active_labeled:
                                 active_labeled = True
                         else:  # No buffer (hogging)
                             color = 'grey'
-                            label = f'Sat {sat_id[-1] if len(sat_id) > 10 else sat_id} (Hogging)' if not hogging_labeled else ''
+                            sat_label = str(sat_id)[-1] if len(str(sat_id)) > 10 else str(sat_id)
+                            label = f'Sat {sat_label} (Hogging)' if not hogging_labeled else ''
                             if not hogging_labeled:
                                 hogging_labeled = True
                     else:  # Disconnected
