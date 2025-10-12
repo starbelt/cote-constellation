@@ -511,7 +511,7 @@ int main(int argc, char** argv) {
         );
       }
       
-      // Write visibility log entries only for events (state changes or image captures)
+      // Write visibility log: every timestep when connected, events otherwise (hybrid approach)
       const double simTimeSeconds = static_cast<double>(stepCount) * totalStepInSec;
       for(size_t i=0; i<satellites.size(); i++) {
         const uint32_t SAT_ID = satellites.at(i).getID();
@@ -537,8 +537,8 @@ int main(int argc, char** argv) {
         bool connectionChanged = (connected != satId2PrevConnected[SAT_ID]);
         bool imageTaken = satId2ImageTaken[SAT_ID];
         
-        // Only log if there's an event
-        if(visibilityChanged || connectionChanged || imageTaken) {
+        // Hybrid logging: every timestep when connected, or only on events when not connected
+        if(connected || visibilityChanged || connectionChanged || imageTaken) {
           // Get current buffer in MB
           double bufferMB = (static_cast<double>(satId2Sensor[SAT_ID]->getBitsBuffered())/8.0)/1.0e6;
           
@@ -547,7 +547,7 @@ int main(int argc, char** argv) {
           double lonDeg = imageTaken ? satId2ImageLon[SAT_ID] : 0.0;
           std::string timestamp = imageTaken ? satId2ImageTimestamp[SAT_ID] : "";
           
-          // Write CSV row for this event
+          // Write CSV row
           visibilityLog << simTimeSeconds << ","
                        << SAT_ID << ","
                        << (inView ? 1 : 0) << ","

@@ -15,8 +15,6 @@ import zipfile
 import glob
 import argparse
 import sys
-import tempfile
-import re
 
 # Configuration - use absolute paths
 SCRIPT_DIR = Path(__file__).parent.absolute()
@@ -24,124 +22,6 @@ LOGS_DIR = SCRIPT_DIR / "logs"
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
 STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 TOP_N = 15
-
-# Image size aliases
-IMAGE_ALIASES = {
-    's': 0.027,
-    'm': 0.279,
-    'l': 2.799,
-    'xl': 28.0
-}
-
-def normalize_name(name, target_list):
-    """Normalize name to match one from target_list, handling case/hyphen/underscore variations"""
-    if not name:
-        return None
-    
-    # Clean the input name
-    clean_name = name.strip().replace('_', '-').replace(' ', '-')
-    
-    # Try exact match first
-    for target in target_list:
-        if clean_name.lower() == target.lower():
-            return target
-    
-    # Try partial matches
-    for target in target_list:
-        target_clean = target.lower().replace('-', '').replace(' ', '')
-        name_clean = clean_name.lower().replace('-', '').replace(' ', '')
-        if target_clean == name_clean:
-            return target
-    
-    return None
-
-def parse_folder_path(path):
-    """Parse folder path to extract sats, image_size, policy, spacing"""
-    path_str = str(path)
-    
-    # Look for constellation_analysis pattern first
-    constellation_match = re.search(r'constellation_analysis_\d+_\d+_(\d+)_(\d+)', path_str)
-    if constellation_match:
-        # Format: constellation_analysis_YYYYMMDD_HHMMSS_IMAGESIZE_SATCOUNT
-        image_size_str = constellation_match.group(1)
-        sat_count_str = constellation_match.group(2)
-        
-        try:
-            # Image size (5-digit format like 00027, 00279, 02799, 28000)
-            image_size = float(image_size_str) / 1000.0  # Convert to MB
-            sat_count = int(sat_count_str)
-            
-            return {
-                'sats': sat_count,
-                'image_size': image_size,
-                'policy': None,  # Will be filled in by discover_logs
-                'spacing': None  # Will be filled in by discover_logs
-            }
-        except (ValueError, IndexError):
-            pass
-    
-    return None
-
-def discover_logs(root_dir="."):
-    """Discover all simulation logs and extract metadata"""
-    root_path = Path(root_dir)
-    logs = []
-    
-    print(f"Searching for visibility logs in: {root_path.absolute()}")
-    
-    # Find all constellation_analysis folders
-    constellation_folders = list(root_path.glob('constellation_analysis_*'))
-    
-    for constellation_folder in constellation_folders:
-        # Parse constellation folder metadata
-        constellation_meta = parse_folder_path(constellation_folder)
-        if not constellation_meta:
-            continue
-            
-        # Look for strategy folders
-        for strategy in STRATEGIES:
-            strategy_folder = constellation_folder / strategy
-            if not strategy_folder.exists():
-                continue
-                
-            # Check for simulation_logs.zip
-            sim_logs_zip = strategy_folder / "simulation_logs.zip"
-            if not sim_logs_zip.exists():
-                continue
-                
-            # Look inside the zip for policy folders with visibility logs
-            try:
-                with zipfile.ZipFile(sim_logs_zip, 'r') as zipf:
-                    for policy in POLICIES:
-                        # Check if this policy has visibility log
-                        visibility_log_path = f"{policy}/visibility_log.csv"
-                        
-                        if visibility_log_path in zipf.namelist():
-                            log_entry = {
-                                'constellation_folder': constellation_folder,
-                                'strategy_folder': strategy_folder,
-                                'simulation_logs_zip': sim_logs_zip,
-                                'sats': constellation_meta['sats'],
-                                'image_size': constellation_meta['image_size'],
-                                'policy': policy,
-                                'spacing': strategy
-                            }
-                            logs.append(log_entry)
-            except Exception as e:
-                print(f"Error reading {sim_logs_zip}: {e}")
-                continue
-    
-    print(f"Found {len(logs)} total logs")
-    return logs
-
-def resolve_image_size(image_input):
-    """Resolve image size from user input (number or alias)"""
-    if isinstance(image_input, str) and image_input.lower() in IMAGE_ALIASES:
-        return IMAGE_ALIASES[image_input.lower()]
-    try:
-        return float(image_input)
-    except (ValueError, TypeError):
-        return None
 
 def extract_constellation_data(folder_path=None):
     """Extract data from specified or latest constellation_analysis folder"""
@@ -262,89 +142,89 @@ def get_active_satellites(strategy_folder):
     
     return sorted(list(all_satellites))
 
-def calculate_cumulative_idle_time_for_policy_efficient(strategy_folder, policy, satellites):
-    """Calculate cumulative idle time using efficient visibility_log.csv method"""
-    print(f"    Calculating cumulative idle time for {policy} (efficient method)...")
+def calculate_cumulative_idle_time_for_policy(strategy_folder, policy, satellites):
+    """Calculate cumulative idle time over time for a specific policy"""
+    print(f"    Calculating cumulative idle time for {policy}...")
     
     simulation_logs_zip = strategy_folder / "simulation_logs.zip"
     
     if not simulation_logs_zip.exists():
         return {}
     
-    cumulative_idle_data = {}
-    
-    # Use temporary directory for zip extraction
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
+    with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
+        # Load tx-rx data to get the time baseline
+        tx_rx_file_path = f"{policy}/meas-downlink-tx-rx.csv"
+        if tx_rx_file_path not in zipf.namelist():
+            print(f"    No tx-rx file found for {policy}")
+            return {}
         
-        with zipfile.ZipFile(simulation_logs_zip, 'r') as zipf:
-            # Extract only the policy directory we need
-            policy_files = [name for name in zipf.namelist() if name.startswith(f"{policy}/")]
-            for file_name in policy_files:
-                zipf.extract(file_name, temp_path)
+        with zipf.open(tx_rx_file_path) as file:
+            tx_rx_df = pd.read_csv(file)
+            tx_rx_df = tx_rx_df.iloc[:, :2]
+            tx_rx_df.columns = ["timestamp", "satellite"]
+            tx_rx_df["timestamp"] = pd.to_datetime(tx_rx_df["timestamp"])
+            
+            # Get global time reference
+            global_min_time = tx_rx_df["timestamp"].min()
+            tx_rx_df["hours"] = (tx_rx_df["timestamp"] - global_min_time).dt.total_seconds() / 3600
         
-        visibility_log_path = temp_path / policy / "visibility_log.csv"
+        cumulative_idle_data = {}
         
-        if not visibility_log_path.exists():
-            print(f"    No visibility log found for {policy}")
-            return {sat: {"hours": [], "cumulative_idle": []} for sat in satellites}
-        
-        # Read visibility log
-        df = pd.read_csv(visibility_log_path)
-        
-        if len(df) == 0:
-            return {sat: {"hours": [], "cumulative_idle": []} for sat in satellites}
-        
-        print(f"    Loaded {len(df)} visibility log entries")
-        
-        # Check for connected entries
-        connected_df = df[df['connected'] == 1]
-        print(f"    Found {len(connected_df)} connected entries")
-        
-        # Check for idle entries (connected AND buffer near 0)
-        idle_df = connected_df[connected_df['buffer_mb'] <= 0.001]
-        print(f"    Found {len(idle_df)} idle entries")
-        
-        # Convert time to hours from start
-        df['time'] = pd.to_numeric(df['time'], errors='coerce')
-        start_time = df['time'].min()
-        df['hours'] = (df['time'] - start_time) / 3600  # Convert seconds to hours
-        
-        # Process each satellite
-        total_idle_found = 0
         for satellite in satellites:
-            # Convert satellite ID format for visibility log lookup
-            # Original format: 60518000-0, visibility log format: 60518000 (as integer)
+            # Get timesteps when this satellite is connected
+            connected_entries = tx_rx_df[tx_rx_df["satellite"] == satellite]
+            
+            if connected_entries.empty:
+                cumulative_idle_data[satellite] = {"hours": [], "cumulative_idle": []}
+                
+            # Load buffer data for this satellite
+            # Convert satellite ID format: 60518000-0 -> 0060518000 for buffer file lookup
             if satellite.endswith("-0"):
-                sat_id_for_lookup = int(satellite[:-2])  # Remove "-0" and convert to int
+                sat_base = satellite[:-2]  # Remove "-0" -> 60518000
+                sat_id = sat_base.zfill(10)  # 60518000 -> 0060518000
             else:
-                sat_id_for_lookup = int(satellite)  # Convert to int
+                sat_id = satellite.zfill(10)
             
-            # Filter data for this satellite
-            sat_data = df[df['sat_id'] == sat_id_for_lookup].copy()
+            buffer_file_path = f"{policy}/meas-MB-buffered-sat-{sat_id}.csv"
             
-            if len(sat_data) == 0:
+            if buffer_file_path not in zipf.namelist():
                 cumulative_idle_data[satellite] = {"hours": [], "cumulative_idle": []}
                 continue
             
-            # Calculate cumulative idle time: connected AND buffer <= 0.001 MB
-            # This is the same logic as the original but much more efficient
-            sat_data['is_idle'] = (sat_data['connected'] == 1) & (sat_data['buffer_mb'] <= 0.001)
-            sat_data['cumulative_idle'] = sat_data['is_idle'].cumsum()
-            
-            # Extract the time series
-            hours_list = sat_data['hours'].tolist()
-            cumulative_idle_list = sat_data['cumulative_idle'].tolist()
-            
-            cumulative_idle_data[satellite] = {
-                "hours": hours_list,
-                "cumulative_idle": cumulative_idle_list
-            }
-            
-            total_idle = cumulative_idle_list[-1] if cumulative_idle_list else 0
-            total_idle_found += total_idle
-            if total_idle > 0:
-                print(f"      Satellite {satellite}: {total_idle} total idle timesteps")
+            with zipf.open(buffer_file_path) as buffer_file:
+                buffer_df = pd.read_csv(buffer_file)
+                buffer_df = buffer_df.iloc[:, :2]
+                buffer_df.columns = ["timestamp", "buffer_mb"]
+                buffer_df["timestamp"] = pd.to_datetime(buffer_df["timestamp"])
+                buffer_df["buffer_mb"] = pd.to_numeric(buffer_df["buffer_mb"], errors='coerce')
+                buffer_df["hours"] = (buffer_df["timestamp"] - global_min_time).dt.total_seconds() / 3600
+                
+                # Calculate cumulative idle time: count timesteps where connected AND buffer = 0
+                hours_list = []
+                cumulative_idle_list = []
+                cumulative_idle = 0
+                
+                # Merge connection and buffer data by timestamp
+                for _, conn_row in connected_entries.iterrows():
+                    conn_time = conn_row["timestamp"]
+                    conn_hours = conn_row["hours"]
+                    
+                    # Find buffer level at this timestamp
+                    buffer_at_time = buffer_df[buffer_df["timestamp"] == conn_time]["buffer_mb"]
+                    
+                    if len(buffer_at_time) > 0 and buffer_at_time.iloc[0] == 0.0:
+                        cumulative_idle += 1
+                    
+                    hours_list.append(conn_hours)
+                    cumulative_idle_list.append(cumulative_idle)
+                
+                cumulative_idle_data[satellite] = {
+                    "hours": hours_list,
+                    "cumulative_idle": cumulative_idle_list
+                }
+                
+                if cumulative_idle > 0:
+                    print(f"      Satellite {satellite}: {cumulative_idle} total idle timesteps")
     
     return cumulative_idle_data
 
@@ -365,7 +245,7 @@ def analyze_idle_times(strategy_folder):
     
     for policy in policy_dirs.keys():
         print(f"  Processing {policy} policy...")
-        cumulative_data = calculate_cumulative_idle_time_for_policy_efficient(strategy_folder, policy, satellites)
+        cumulative_data = calculate_cumulative_idle_time_for_policy(strategy_folder, policy, satellites)
         results[policy] = cumulative_data
     
     return results, satellites
@@ -493,86 +373,49 @@ def create_idle_time_charts(strategy_folder, strategy_name, constellation_analys
     return output_path
 
 def main():
-    """Main function with satellite count and image size filtering"""
-    parser = argparse.ArgumentParser(description='Generate satellite idle time analysis plots')
-    parser.add_argument('--root-dir', default='.', help='Root directory to search for constellation analysis folders')
-    parser.add_argument('--sats', type=int, required=True, help='Number of satellites to filter by')
-    parser.add_argument('--image', required=True, help='Image size to filter by (number in MB or alias: s, m, l, xl)')
+    """Main execution function"""
+    print("=== Multi-Satellite Downlink Idle Time Analysis ===")
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Generate multi-satellite idle time plots')
+    parser.add_argument('folder', nargs='?', default=None, 
+                       help='Constellation analysis folder to process (optional, defaults to latest)')
     args = parser.parse_args()
     
-    # Resolve image size
-    target_image = resolve_image_size(args.image)
-    if target_image is None:
-        print(f"Error: Invalid image size '{args.image}'. Use a number (MB) or alias: s, m, l, xl")
-        return 1
+    # Extract constellation analysis data
+    constellation_analysis_folder = extract_constellation_data(args.folder)
+    if not constellation_analysis_folder:
+        print("No constellation analysis data found!")
+        print("Please run constellation analysis first.")
+        return
     
-    print("Multi-Satellite Idle Time Analysis")
-    print(f"Filtering by: {args.sats} satellites, {target_image:.3f}MB image size")
+    print(f"Processing constellation analysis folder: {constellation_analysis_folder.name}")
     
-    # Discover all logs
-    all_logs = discover_logs(args.root_dir)
-    if not all_logs:
-        print("❌ No constellation analysis data found!")
-        return 1
+    # Read configuration
+    config = read_config()
+    print(f"Configuration: {config}")
     
-    # Show available parameters
-    available_sats = sorted(set(log['sats'] for log in all_logs))
-    available_images = sorted(set(log['image_size'] for log in all_logs))
-    print(f"Available satellite counts: {available_sats}")
-    print(f"Available image sizes: {available_images}")
-    
-    # Filter logs by satellite count and image size
-    filtered_logs = []
-    for log in all_logs:
-        if log['sats'] == args.sats and abs(log['image_size'] - target_image) < 0.001:
-            filtered_logs.append(log)
-    
-    if not filtered_logs:
-        print(f"❌ No logs found for sats={args.sats}, image={target_image:.3f}MB")
-        return 1
-    
-    print(f"Found {len(filtered_logs)} logs for sats={args.sats}, image={target_image:.3f}MB")
-    
-    # Group logs by constellation folder (same analysis run)
-    constellation_groups = {}
-    for log in filtered_logs:
-        folder_key = log['constellation_folder']
-        if folder_key not in constellation_groups:
-            constellation_groups[folder_key] = []
-        constellation_groups[folder_key].append(log)
-    
-    # Process each constellation analysis folder
+    # Process each strategy
     generated_plots = []
-    for constellation_folder, logs_in_folder in constellation_groups.items():
-        print(f"\nProcessing constellation analysis folder: {constellation_folder.name}")
-        
-        # Group by strategy within this constellation folder
-        strategy_groups = {}
-        for log in logs_in_folder:
-            strategy = log['spacing']
-            if strategy not in strategy_groups:
-                strategy_groups[strategy] = []
-            strategy_groups[strategy].append(log)
-        
-        # Process each strategy
-        for strategy, strategy_logs in strategy_groups.items():
-            print(f"  Processing {strategy} strategy...")
+    for strategy in STRATEGIES:
+        strategy_folder = constellation_analysis_folder / strategy
+        if strategy_folder.exists():
+            print(f"\nProcessing {strategy} strategy...")
             try:
-                # Use the first log's strategy_folder for the strategy
-                strategy_folder = strategy_logs[0]['strategy_folder']
-                
                 # Analyze idle times for this strategy
                 results, satellites = analyze_idle_times(strategy_folder)
+                
                 if results:
-                    # Read configuration
-                    config = read_config()
-                    
-                    # Generate plot
-                    output_path = create_idle_time_charts(strategy_folder, strategy, constellation_folder, results, satellites, config)
+                    # Create charts
+                    output_path = create_idle_time_charts(strategy_folder, strategy, constellation_analysis_folder, results, satellites, config)
                     if output_path:
                         generated_plots.append(output_path)
+                else:
+                    print(f"No results generated for {strategy} strategy!")
             except Exception as e:
-                print(f"  Error processing {strategy} strategy: {e}")
+                print(f"Error processing {strategy} strategy: {e}")
+        else:
+            print(f"Strategy folder not found: {strategy}")
     
     if generated_plots:
         print(f"\nIdle time analysis complete! Generated {len(generated_plots)} plots:")
@@ -580,8 +423,6 @@ def main():
             print(f"  {plot_path}")
     else:
         print("No plots were generated.")
-    
-    return 0
 
 if __name__ == "__main__":
-    exit(main())
+    main()

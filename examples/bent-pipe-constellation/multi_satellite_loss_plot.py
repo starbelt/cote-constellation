@@ -14,59 +14,91 @@ import zipfile
 import glob
 import argparse
 import sys
+import json
+import tempfile
 
 # Configuration - use absolute paths
 SCRIPT_DIR = Path(__file__).parent.absolute()
 LOGS_DIR = SCRIPT_DIR / "logs"
+
+# Image size aliases and their corresponding values in MB
+IMAGE_SIZE_ALIASES = {
+    's': 0.027,     # small
+    'm': 0.279,     # medium  
+    'l': 2.799,     # large
+    'xl': 28.0      # extra large
+}
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
 STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 TOP_N = 15
 
-def extract_constellation_data(folder_path=None):
-    """Extract data from constellation_analysis folders"""
+def discover_logs(root_dir):
+    """Discover constellation analysis folders with format: constellation_analysis_YYYYMMDD_HHMMSS_IMAGESIZE_SATCOUNT"""
+    constellation_folders = []
     
-    if folder_path:
-        # User specified a folder
-        folder = Path(folder_path)
+    for item in Path(root_dir).iterdir():
+        if item.is_dir() and item.name.startswith("constellation_analysis_"):
+            constellation_folders.append(item)
+    
+    # Sort by timestamp (newest first)
+    constellation_folders.sort(key=lambda x: x.name, reverse=True)
+    return constellation_folders
+
+def parse_folder_path(folder_path):
+    """Parse constellation analysis folder name to extract parameters"""
+    folder_name = Path(folder_path).name
+    
+    # Expected format: constellation_analysis_YYYYMMDD_HHMMSS_IMAGESIZE_SATCOUNT
+    parts = folder_name.split('_')
+    if len(parts) < 5:
+        return None
+    
+    try:
+        timestamp = f"{parts[2]}_{parts[3]}"
+        # The image size in folder names is scaled by 1000 (e.g., 00279 = 0.279MB)
+        image_size_raw = int(parts[4])
+        image_size = image_size_raw / 1000.0  # Convert back to MB
+        sat_count = int(parts[5])
         
-        # Handle relative paths from current directory
-        if not folder.is_absolute():
-            folder = SCRIPT_DIR / folder
-        
-        # Validate folder exists and follows naming convention
-        if not folder.exists():
-            print(f"❌ Error: Specified folder '{folder_path}' does not exist!")
-            return None
-        
-        if not folder.is_dir():
-            print(f"❌ Error: '{folder_path}' is not a directory!")
-            return None
-        
-        if not folder.name.startswith('constellation_analysis_'):
-            print(f"⚠️  Warning: Folder '{folder.name}' does not follow expected naming convention (constellation_analysis_YYYYMMDD_HHMMSS)")
-        
-        print(f"📁 Using specified constellation analysis folder: {folder.name}")
-        return folder
-    else:
-        # Find latest folder (existing behavior)
-        constellation_folders = []
-        
-        # Look for constellation_analysis folders in the current directory
-        pattern = str(SCRIPT_DIR / "constellation_analysis_*")
-        for folder_path in glob.glob(pattern):
-            folder = Path(folder_path)
-            if folder.is_dir():
-                constellation_folders.append(folder)
-        
-        if not constellation_folders:
-            print("No constellation_analysis folders found!")
-            return None
-        
-        # Use the most recent constellation analysis folder
-        latest_folder = max(constellation_folders, key=lambda x: x.stat().st_mtime)
-        print(f"📁 Using latest constellation analysis folder: {latest_folder.name}")
-        
-        return latest_folder
+        return {
+            'timestamp': timestamp,
+            'image_size': image_size,
+            'sat_count': sat_count
+        }
+    except (ValueError, IndexError):
+        return None
+
+def resolve_image_size(image_alias_or_value):
+    """Resolve image size alias to actual MB value"""
+    if isinstance(image_alias_or_value, str) and image_alias_or_value.lower() in IMAGE_SIZE_ALIASES:
+        return IMAGE_SIZE_ALIASES[image_alias_or_value.lower()]
+    try:
+        return float(image_alias_or_value)
+    except (ValueError, TypeError):
+        return None
+
+def filter_folders_by_parameters(folders, target_sats=None, target_image_size=None):
+    """Filter constellation folders by satellite count and image size"""
+    filtered = []
+    
+    for folder in folders:
+        params = parse_folder_path(folder)
+        if params is None:
+            continue
+            
+        # Check satellite count
+        if target_sats is not None and params['sat_count'] != target_sats:
+            continue
+            
+        # Check image size  
+        if target_image_size is not None:
+            resolved_size = resolve_image_size(target_image_size)
+            if resolved_size is None or abs(params['image_size'] - resolved_size) > 0.001:
+                continue
+                
+        filtered.append(folder)
+    
+    return filtered
 
 def read_config():
     """Read simulation configuration"""
@@ -396,40 +428,85 @@ def main():
     
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Generate multi-satellite data loss plots')
-    parser.add_argument('folder', nargs='?', default=None, 
-                       help='Constellation analysis folder to process (optional, defaults to latest)')
+    parser.add_argument('--sats', type=int, required=True,
+                       choices=[1, 50, 100, 200],
+                       help='Number of satellites (1, 50, 100, or 200)')
+    parser.add_argument('--image', required=True,
+                       help='Image size: s/m/l/xl aliases or MB value (e.g., s, m, l, xl, 0.027, 2.799)')
+    parser.add_argument('--root-dir', default='../../analysis/',
+                       help='Root directory containing constellation_analysis folders (default: ../../analysis/)')
+    
     args = parser.parse_args()
     
-    # Extract constellation analysis data
-    constellation_analysis_folder = extract_constellation_data(args.folder)
-    if not constellation_analysis_folder:
-        print("No constellation analysis data found!")
-        print("Please run constellation analysis first.")
+    # Resolve root directory
+    root_dir = Path(args.root_dir)
+    if not root_dir.is_absolute():
+        root_dir = SCRIPT_DIR / root_dir
+    root_dir = root_dir.resolve()
+    
+    if not root_dir.exists():
+        print(f"❌ Error: Root directory '{root_dir}' does not exist!")
         return
     
-    print(f"Processing constellation analysis folder: {constellation_analysis_folder.name}")
+    print(f"🔍 Searching for constellation analysis folders in: {root_dir}")
+    
+    # Discover constellation analysis folders
+    all_folders = discover_logs(root_dir)
+    if not all_folders:
+        print("❌ No constellation_analysis folders found!")
+        print("Expected folder format: constellation_analysis_YYYYMMDD_HHMMSS_IMAGESIZE_SATCOUNT")
+        return
+    
+    print(f"📁 Found {len(all_folders)} constellation analysis folders")
+    
+    # Resolve image size
+    resolved_image_size = resolve_image_size(args.image)
+    if resolved_image_size is None:
+        print(f"❌ Error: Invalid image size '{args.image}'. Use s/m/l/xl or a numeric value.")
+        return
+    
+    # Filter by parameters  
+    filtered_folders = filter_folders_by_parameters(all_folders, target_sats=args.sats, target_image_size=resolved_image_size)
+    
+    if not filtered_folders:
+        print(f"❌ No folders found matching --sats {args.sats} --image {args.image}")
+        print("Available folders:")
+        for folder in all_folders[:5]:  # Show first 5
+            params = parse_folder_path(folder)
+            if params:
+                print(f"  {folder.name} (sats: {params['sat_count']}, image: {params['image_size']:.3f}MB)")
+        return
+    
+    # Use the most recent matching folder
+    constellation_analysis_folder = filtered_folders[0]
+    params = parse_folder_path(constellation_analysis_folder)
+    
+    print(f"📊 Using folder: {constellation_analysis_folder.name}")
+    print(f"   Parameters: {params['sat_count']} satellites, {params['image_size']:.3f} MB images")
     
     # Process each strategy
     generated_plots = []
     for strategy in STRATEGIES:
         strategy_folder = constellation_analysis_folder / strategy
         if strategy_folder.exists():
-            print(f"\nProcessing {strategy} strategy...")
+            print(f"\n🔄 Processing {strategy} strategy...")
             try:
                 output_path = create_plot(strategy_folder, strategy, constellation_analysis_folder)
                 if output_path:
                     generated_plots.append(output_path)
             except Exception as e:
-                print(f"Error processing {strategy} strategy: {e}")
+                print(f"❌ Error processing {strategy} strategy: {e}")
         else:
-            print(f"Strategy folder not found: {strategy}")
+            print(f"⚠️  Strategy folder not found: {strategy}")
     
     if generated_plots:
-        print(f"\nData Loss analysis complete! Generated {len(generated_plots)} plots:")
+        print(f"\n✅ Data Loss analysis complete! Generated {len(generated_plots)} plots:")
         for plot_path in generated_plots:
-            print(f"  {plot_path}")
+            print(f"   📈 {plot_path}")
     else:
-        print("No plots were generated.")
+        print("❌ No plots were generated.")
+        
+    return generated_plots
 
 if __name__ == "__main__":
     main()

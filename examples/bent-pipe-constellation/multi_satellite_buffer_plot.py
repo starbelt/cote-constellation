@@ -18,6 +18,7 @@ import shutil
 import argparse
 import sys
 import glob
+import re
 
 # Configuration - use absolute paths
 SCRIPT_DIR = Path(__file__).parent.absolute()
@@ -25,6 +26,125 @@ LOGS_DIR = SCRIPT_DIR / "logs"
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
 STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 TOP_N = 15
+
+# Image size aliases
+IMAGE_ALIASES = {
+    's': 0.027,
+    'm': 0.279,
+    'l': 2.799,
+    'xl': 28.0
+}
+
+def normalize_name(name, target_list):
+    """Normalize name to match one from target_list, handling case/hyphen/underscore variations"""
+    if not name:
+        return None
+    
+    # Clean the input name
+    clean_name = name.strip().replace('_', '-').replace(' ', '-')
+    
+    # Try exact match first
+    for target in target_list:
+        if clean_name.lower() == target.lower():
+            return target
+    
+    # Try partial matches
+    for target in target_list:
+        target_clean = target.lower().replace('-', '').replace(' ', '')
+        name_clean = clean_name.lower().replace('-', '').replace(' ', '')
+        if target_clean == name_clean:
+            return target
+    
+    return None
+
+def parse_folder_path(path):
+    """Parse folder path to extract sats, image_size, policy, spacing"""
+    path_str = str(path)
+    
+    # Look for constellation_analysis pattern first
+    constellation_match = re.search(r'constellation_analysis_\d+_\d+_(\d+)_(\d+)', path_str)
+    if constellation_match:
+        # Format: constellation_analysis_YYYYMMDD_HHMMSS_IMAGESIZE_SATCOUNT
+        image_size_str = constellation_match.group(1)
+        sat_count_str = constellation_match.group(2)
+        
+        try:
+            # Image size (5-digit format like 00027, 00279, 02799, 28000)
+            image_size = float(image_size_str) / 1000.0  # Convert to MB
+            sat_count = int(sat_count_str)
+            
+            return {
+                'sats': sat_count,
+                'image_size': image_size,
+                'policy': None,  # Will be filled in by discover_logs
+                'spacing': None  # Will be filled in by discover_logs
+            }
+        except (ValueError, IndexError):
+            pass
+    
+    return None
+
+def discover_logs(root_dir="."):
+    """Discover all simulation logs and extract metadata"""
+    root_path = Path(root_dir)
+    logs = []
+    
+    print(f"Searching for visibility logs in: {root_path.absolute()}")
+    
+    # Find all constellation_analysis folders
+    constellation_folders = list(root_path.glob('constellation_analysis_*'))
+    
+    for constellation_folder in constellation_folders:
+        # Parse constellation folder metadata
+        constellation_meta = parse_folder_path(constellation_folder)
+        if not constellation_meta:
+            continue
+            
+        # Look for strategy folders
+        for strategy in STRATEGIES:
+            strategy_folder = constellation_folder / strategy
+            if not strategy_folder.exists():
+                continue
+                
+            # Check for simulation_logs.zip
+            sim_logs_zip = strategy_folder / "simulation_logs.zip"
+            if not sim_logs_zip.exists():
+                continue
+                
+            # Look inside the zip for policy folders
+            try:
+                with zipfile.ZipFile(sim_logs_zip, 'r') as zipf:
+                    for policy in POLICIES:
+                        # Check if this policy has buffer files
+                        policy_files = [name for name in zipf.namelist() 
+                                      if name.startswith(f"{policy}/") and "meas-MB-buffered-sat-" in name]
+                        
+                        if policy_files:
+                            log_entry = {
+                                'constellation_folder': constellation_folder,
+                                'strategy_folder': strategy_folder,
+                                'simulation_logs_zip': sim_logs_zip,
+                                'sats': constellation_meta['sats'],
+                                'image_size': constellation_meta['image_size'],
+                                'policy': policy,
+                                'spacing': strategy
+                            }
+                            logs.append(log_entry)
+            except Exception as e:
+                print(f"Error reading {sim_logs_zip}: {e}")
+                continue
+    
+    print(f"Found {len(logs)} total logs")
+    return logs
+
+def resolve_image_size(image_input):
+    """Resolve image size from user input (number or alias)"""
+    if isinstance(image_input, str) and image_input.lower() in IMAGE_ALIASES:
+        return IMAGE_ALIASES[image_input.lower()]
+    try:
+        return float(image_input)
+    except (ValueError, TypeError):
+        return None
 
 def extract_constellation_data(folder_path=None):
     """Extract constellation analysis data from the specified or latest folder."""
@@ -411,39 +531,78 @@ def create_plot(strategy_folder, strategy_name, constellation_analysis_folder):
     return output_path
 
 def main():
-    """Main function with optional folder argument"""
+    """Main function with satellite count and image size filtering"""
     parser = argparse.ArgumentParser(description='Generate satellite buffer level time series plots')
-    parser.add_argument('folder', nargs='?', help='Constellation analysis folder (default: use latest)')
+    parser.add_argument('--root-dir', default='.', help='Root directory to search for constellation analysis folders')
+    parser.add_argument('--sats', type=int, required=True, help='Number of satellites to filter by')
+    parser.add_argument('--image', required=True, help='Image size to filter by (number in MB or alias: s, m, l, xl)')
     args = parser.parse_args()
     
+    # Resolve image size
+    target_image = resolve_image_size(args.image)
+    if target_image is None:
+        print(f"Error: Invalid image size '{args.image}'. Use a number (MB) or alias: s, m, l, xl")
+        return 1
+    
     print("Multi-Satellite Buffer Analysis")
+    print(f"Filtering by: {args.sats} satellites, {target_image:.3f}MB image size")
     
-    # Extract constellation analysis data
-    constellation_analysis_folder = extract_constellation_data(args.folder)
-    if not constellation_analysis_folder:
+    # Discover all logs
+    all_logs = discover_logs(args.root_dir)
+    if not all_logs:
         print("❌ No constellation analysis data found!")
-        if args.folder:
-            print(f"Specified folder: {args.folder}")
-        else:
-            print("Please run constellation analysis first or specify a valid folder.")
-        return
+        return 1
     
-    print(f"Processing constellation analysis folder: {constellation_analysis_folder.name}")
+    # Show available parameters
+    available_sats = sorted(set(log['sats'] for log in all_logs))
+    available_images = sorted(set(log['image_size'] for log in all_logs))
+    print(f"Available satellite counts: {available_sats}")
+    print(f"Available image sizes: {available_images}")
     
-    # Process each strategy
+    # Filter logs by satellite count and image size
+    filtered_logs = []
+    for log in all_logs:
+        if log['sats'] == args.sats and abs(log['image_size'] - target_image) < 0.001:
+            filtered_logs.append(log)
+    
+    if not filtered_logs:
+        print(f"❌ No logs found for sats={args.sats}, image={target_image:.3f}MB")
+        return 1
+    
+    print(f"Found {len(filtered_logs)} logs for sats={args.sats}, image={target_image:.3f}MB")
+    
+    # Group logs by constellation folder (same analysis run)
+    constellation_groups = {}
+    for log in filtered_logs:
+        folder_key = log['constellation_folder']
+        if folder_key not in constellation_groups:
+            constellation_groups[folder_key] = []
+        constellation_groups[folder_key].append(log)
+    
+    # Process each constellation analysis folder
     generated_plots = []
-    for strategy in STRATEGIES:
-        strategy_folder = constellation_analysis_folder / strategy
-        if strategy_folder.exists():
-            print(f"\nProcessing {strategy} strategy...")
+    for constellation_folder, logs_in_folder in constellation_groups.items():
+        print(f"\nProcessing constellation analysis folder: {constellation_folder.name}")
+        
+        # Group by strategy within this constellation folder
+        strategy_groups = {}
+        for log in logs_in_folder:
+            strategy = log['spacing']
+            if strategy not in strategy_groups:
+                strategy_groups[strategy] = []
+            strategy_groups[strategy].append(log)
+        
+        # Process each strategy
+        for strategy, strategy_logs in strategy_groups.items():
+            print(f"  Processing {strategy} strategy...")
             try:
-                output_path = create_plot(strategy_folder, strategy, constellation_analysis_folder)
+                # Use the first log's strategy_folder for the strategy
+                strategy_folder = strategy_logs[0]['strategy_folder']
+                output_path = create_plot(strategy_folder, strategy, constellation_folder)
                 if output_path:
                     generated_plots.append(output_path)
             except Exception as e:
-                print(f"Error processing {strategy} strategy: {e}")
-        else:
-            print(f"Strategy folder not found: {strategy}")
+                print(f"  Error processing {strategy} strategy: {e}")
     
     if generated_plots:
         print(f"\nBuffer analysis complete! Generated {len(generated_plots)} plots:")
@@ -451,6 +610,8 @@ def main():
             print(f"  {plot_path}")
     else:
         print("No plots were generated.")
+    
+    return 0
 
 if __name__ == "__main__":
-    main()
+    exit(main())
