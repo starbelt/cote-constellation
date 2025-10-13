@@ -224,15 +224,6 @@ def plot_satellite_count_timeseries(spacing_data, output_path, num_sats, image_s
         # Set y-axis to show from 0 to max satellites
         max_count = int(count.max()) if len(count) > 0 else num_sats
         ax.set_ylim(0, max_count + 5)
-        
-        # Add stats text
-        if len(count) > 0:
-            mean_count = count.mean()
-            max_count_val = count.max()
-            ax.text(0.02, 0.98, f'Max: {int(max_count_val)}\nAvg: {mean_count:.1f}',
-                   transform=ax.transAxes, fontsize=9,
-                   verticalalignment='top',
-                   bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     
     plt.tight_layout()
     
