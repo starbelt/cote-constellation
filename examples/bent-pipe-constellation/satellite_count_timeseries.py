@@ -190,7 +190,7 @@ def calculate_satellite_count_timeseries(zip_path, policy):
         except:
             pass
 
-def plot_satellite_count_timeseries(spacing_data, output_path, num_sats, image_size):
+def plot_satellite_count_timeseries(spacing_data, output_path, num_sats):
     """
     Generate 2x2 subplot for all spacing strategies showing satellite count over time.
     Single line per spacing strategy (contention is independent of link policy).
@@ -198,8 +198,7 @@ def plot_satellite_count_timeseries(spacing_data, output_path, num_sats, image_s
     fig, axes = plt.subplots(2, 2, figsize=(16, 10))
     axes = axes.flatten()
     
-    fig.suptitle(f'Satellites in View Over Time (Contention)\n'
-                 f'{num_sats} satellites, {image_size:.3f} MB image size',
+    fig.suptitle(f'Satellites in View Over Time (Contention) - {num_sats} Constellation Size',
                  fontsize=14, fontweight='bold', y=0.995)
     
     for idx, spacing in enumerate(STRATEGIES):
@@ -241,14 +240,8 @@ def main():
     parser = argparse.ArgumentParser(
         description='Generate satellite count timeseries showing total satellites in view over time'
     )
-    parser.add_argument('--image', type=str, 
-                       help='Image size (s/m/l/xl or numeric MB value)')
     parser.add_argument('--sats', type=int,
-                       help='Number of satellites')
-    parser.add_argument('--policy', type=str,
-                       help='Policy name (sticky, fifo, roundrobin, random)')
-    parser.add_argument('--spacing', type=str,
-                       help='Spacing strategy (close-spaced, orbit-spaced, etc)')
+                       help='Number of satellites (if not specified, processes all: 1, 50, 100, 200)')
     
     args = parser.parse_args()
     
@@ -259,36 +252,18 @@ def main():
         print("❌ No visibility logs found!")
         return 1
     
-    # Filter logs based on arguments
-    filtered_logs = all_logs
+    # Filter logs: always use image size 'm' (0.279 MB) and sticky policy as reference
+    target_image = IMAGE_ALIASES['m']
+    target_policy = 'sticky'
     
-    if args.image:
-        if args.image.lower() in IMAGE_ALIASES:
-            target_image = IMAGE_ALIASES[args.image.lower()]
-        else:
-            try:
-                target_image = float(args.image)
-            except ValueError:
-                print(f"❌ Invalid image size: {args.image}")
-                return 1
-        filtered_logs = [log for log in filtered_logs 
-                        if abs(log['image_size'] - target_image) < 0.001]
+    filtered_logs = [log for log in all_logs 
+                    if abs(log['image_size'] - target_image) < 0.001
+                    and log['policy'] == target_policy]
     
+    # Filter by satellite count if specified
     if args.sats:
         filtered_logs = [log for log in filtered_logs 
                         if log['sats'] == args.sats]
-    
-    if args.policy:
-        target_policy = normalize_name(args.policy, POLICIES)
-        if target_policy:
-            filtered_logs = [log for log in filtered_logs 
-                           if log['policy'] == target_policy]
-    
-    if args.spacing:
-        target_spacing = normalize_name(args.spacing, STRATEGIES)
-        if target_spacing:
-            filtered_logs = [log for log in filtered_logs 
-                           if log['strategy'] == target_spacing]
     
     if not filtered_logs:
         print("❌ No logs match the specified filters!")
@@ -342,33 +317,11 @@ def main():
         
         # Generate single plot with all spacing strategies
         if any(v is not None for v in spacing_data.values()):
-            # Format image size for filename
-            if image_size < 0.1:
-                image_str = f"0p0{int(image_size * 1000)}MB"
-            elif image_size < 1:
-                image_str = f"0p{int(image_size * 1000)}MB"
-            else:
-                image_str = f"{int(image_size)}MB"
+            # Output PNG one level up (general, not specific to image size)
+            output_filename = f"satellite_count_timeseries_{sats}sats.png"
+            output_path = constellation_folder.parent / output_filename
             
-            output_filename = f"satellite_count_timeseries_{image_str}_{sats}sats.png"
-            output_path = constellation_folder / output_filename
-            
-            # Create data directory for CSV exports
-            data_dir = constellation_folder / f"satellite_count_timeseries_{image_str}_{sats}sats_data"
-            data_dir.mkdir(exist_ok=True)
-            
-            # Export CSV for each spacing strategy
-            for spacing, data in spacing_data.items():
-                if data is not None:
-                    csv_path = data_dir / f"{spacing}.csv"
-                    df = pd.DataFrame({
-                        'time_hours': data['hours'],
-                        'satellites_in_view': data['count']
-                    })
-                    df.to_csv(csv_path, index=False)
-                    print(f"  ✅ Saved CSV: {csv_path}")
-            
-            plot_satellite_count_timeseries(spacing_data, output_path, sats, image_size)
+            plot_satellite_count_timeseries(spacing_data, output_path, sats)
     
     print("✅ All satellite count timeseries plots generated!")
     return 0
