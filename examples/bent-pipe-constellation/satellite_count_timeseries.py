@@ -131,40 +131,42 @@ def calculate_satellite_count_timeseries(zip_path, policy):
         if len(df) == 0:
             return None
         
-        # Group by time and count how many satellites are in view at each moment
-        count_per_time = df.groupby('time')['in_view'].sum().reset_index()
-        count_per_time.columns = ['time', 'count']
-        count_per_time = count_per_time.sort_values('time').reset_index(drop=True)
+        # At each time snapshot, count how many satellites are in_view across all sats
+        # Only count rows where in_view=1
+        in_view_df = df[df['in_view'] == 1]
+        count_per_time = in_view_df.groupby('time').size().reset_index(name='count')
         
-        # Apply forward-looking maximum filter to smooth flicker without bleeding between passes
-        # When satellites flicker 50->1->50 at threshold, take the max (50) as the true count
-        # Forward-only window prevents blending separate passes (no centered rolling)
-        confirmation_window = 5  # Look ahead 5 samples (~15 seconds)
+        # Get all unique times to ensure we have zero counts when no satellites are in view
+        all_times = pd.DataFrame({'time': sorted(df['time'].unique())})
+        count_per_time = all_times.merge(count_per_time, on='time', how='left')
+        count_per_time['count'] = count_per_time['count'].fillna(0).astype(int)
         
-        count_per_time['count_smoothed'] = 0.0
+        # Detect and smooth rapid oscillations (e.g., 50->1->50->1 flicker at 10° threshold)
+        # If we see the count rapidly alternating between two values, take the max
+        count_per_time['smoothed'] = count_per_time['count'].copy()
         
-        for i in range(len(count_per_time)):
-            # Take maximum of current + next N samples (forward-looking only)
-            if i + confirmation_window <= len(count_per_time):
-                window_samples = count_per_time.iloc[i:i+confirmation_window]['count'].values
-                count_per_time.loc[i, 'count_smoothed'] = window_samples.max()
-            else:
-                # Near end - just use remaining samples
-                window_samples = count_per_time.iloc[i:]['count'].values
-                count_per_time.loc[i, 'count_smoothed'] = window_samples.max()
+        window_size = 5  # Look at 5 consecutive samples
+        for i in range(len(count_per_time) - window_size + 1):
+            window = count_per_time.iloc[i:i+window_size]['count'].values
+            unique_vals = set(window)
+            
+            # If we see only 2 unique values alternating, it's likely flicker
+            if len(unique_vals) == 2:
+                # Take the maximum value in this window
+                max_val = max(unique_vals)
+                # Apply to middle of window
+                count_per_time.loc[i+2, 'smoothed'] = max_val
         
-        # Only keep points where the confirmed count changes significantly
+        # Only keep points where smoothed count changes
         changes = []
         changes.append(0)  # Always keep first point
         
-        change_threshold = 3  # Ignore changes smaller than 3 satellites
-        
         for i in range(1, len(count_per_time)):
-            prev_count = count_per_time.iloc[changes[-1]]['count_smoothed']
-            curr_count = count_per_time.iloc[i]['count_smoothed']
+            prev_count = count_per_time.iloc[changes[-1]]['smoothed']
+            curr_count = count_per_time.iloc[i]['smoothed']
             
-            # Keep this point if count changed significantly
-            if abs(curr_count - prev_count) >= change_threshold:
+            # Keep this point if count changed
+            if curr_count != prev_count:
                 changes.append(i)
         
         # Always keep last point
@@ -179,7 +181,7 @@ def calculate_satellite_count_timeseries(zip_path, policy):
         
         return {
             'hours': count_changes['hours'].values,
-            'count': count_changes['count_smoothed'].values
+            'count': count_changes['smoothed'].values
         }
         
     finally:
@@ -212,8 +214,9 @@ def plot_satellite_count_timeseries(spacing_data, output_path, num_sats, image_s
         hours = data['hours']
         count = data['count']
         
-        # Plot single thin line showing satellite count (like stock market chart)
-        ax.plot(hours, count, linewidth=0.5, color='#2E86AB', alpha=1.0)
+        # Plot as step chart - horizontal lines with vertical jumps at changes
+        # This prevents diagonal lines that create "bar" appearance with many transitions
+        ax.plot(hours, count, linewidth=0.5, color='#2E86AB', alpha=1.0, drawstyle='steps-post')
         
         ax.set_title(f'{spacing}',
                     fontsize=12, fontweight='bold')
@@ -349,6 +352,21 @@ def main():
             
             output_filename = f"satellite_count_timeseries_{image_str}_{sats}sats.png"
             output_path = constellation_folder / output_filename
+            
+            # Create data directory for CSV exports
+            data_dir = constellation_folder / f"satellite_count_timeseries_{image_str}_{sats}sats_data"
+            data_dir.mkdir(exist_ok=True)
+            
+            # Export CSV for each spacing strategy
+            for spacing, data in spacing_data.items():
+                if data is not None:
+                    csv_path = data_dir / f"{spacing}.csv"
+                    df = pd.DataFrame({
+                        'time_hours': data['hours'],
+                        'satellites_in_view': data['count']
+                    })
+                    df.to_csv(csv_path, index=False)
+                    print(f"  ✅ Saved CSV: {csv_path}")
             
             plot_satellite_count_timeseries(spacing_data, output_path, sats, image_size)
     
