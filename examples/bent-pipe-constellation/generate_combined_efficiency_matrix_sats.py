@@ -222,8 +222,13 @@ def extract_params_from_folder(folder_name):
     sat_count = extract_satellite_count_from_folder(folder_name)
     return image_size, sat_count
 
-def generate_combined_efficiency_matrix(base_folder):
-    """Generate combined data efficiency matrix for all image sizes, satellite counts and strategies"""
+def generate_combined_efficiency_matrix(base_folder, metric='percentage'):
+    """Generate combined data efficiency matrix for all image sizes, satellite counts and strategies
+    
+    Args:
+        base_folder: Path to folder containing analysis folders
+        metric: 'percentage' for efficiency % or 'absdata' for absolute GB downloaded
+    """
     base_path = Path(base_folder)
     
     if not base_path.exists():
@@ -335,13 +340,22 @@ def generate_combined_efficiency_matrix(base_folder):
     # Create the plot with adjusted size for the much larger 4D matrix
     fig, ax = plt.subplots(figsize=(24, 18))  # Larger to accommodate 4x more columns
     
-    # Use Greens colormap for total data downloaded (higher data = better = darker green)
-    cmap = 'Greens'
-    better_text = "Higher Values = Better Performance (More Data Downloaded)"
+    # Configure visualization based on metric
+    if metric == 'absdata':
+        # Use Greens colormap for total data downloaded (higher data = better = darker green)
+        cmap = 'Greens'
+        better_text = "Higher Values = Better Performance (More Data Downloaded)"
+        data_matrix = download_matrix / 1000  # Convert MB to GB for display
+        colorbar_label = 'Total Data Downloaded (GB)'
+    else:  # percentage
+        # Use Greens colormap for efficiency percentage
+        cmap = 'Greens'
+        better_text = "Higher Values = Better Efficiency (%)"
+        data_matrix = efficiency_matrix
+        colorbar_label = 'Data Download Efficiency (%)'
     
-    # Create the heatmap based on total data downloaded (in GB for better scale)
-    download_matrix_gb = download_matrix / 1000  # Convert MB to GB for display
-    im = ax.imshow(download_matrix_gb, cmap=cmap, aspect='auto')
+    # Create the heatmap
+    im = ax.imshow(data_matrix, cmap=cmap, aspect='auto')
     
     # Create strategy labels that repeat for each satellite count
     strategy_labels = []
@@ -391,7 +405,7 @@ def generate_combined_efficiency_matrix(base_folder):
     
     # Add colorbar
     cbar = plt.colorbar(im, ax=ax, shrink=0.6)
-    cbar.set_label('Total Data Downloaded (GB)', rotation=270, labelpad=20, fontsize=12, fontweight='bold')
+    cbar.set_label(colorbar_label, rotation=270, labelpad=20, fontsize=12, fontweight='bold')
     cbar.ax.tick_params(labelsize=10)
     
     # Add text annotations with values 
@@ -406,13 +420,23 @@ def generate_combined_efficiency_matrix(base_folder):
                     download_gb = download_matrix[row_idx, col_idx] / 1000  # Convert MB to GB
                     efficiency_pct = efficiency_matrix[row_idx, col_idx]
                     
-                    # Format text showing download and efficiency
-                    if download_gb >= 1000:  # Use TB for very large values
-                        value_text = f'{download_gb/1000:.1f}TB\n{efficiency_pct:.1f}%'
-                    elif download_gb >= 1:
-                        value_text = f'{download_gb:.1f}GB\n{efficiency_pct:.1f}%'
-                    else:
-                        value_text = f'{download_matrix[row_idx, col_idx]:.0f}MB\n{efficiency_pct:.1f}%'
+                    # Format text based on metric choice
+                    if metric == 'absdata':
+                        # Show download data prominently, efficiency as secondary
+                        if download_gb >= 1000:  # Use TB for very large values
+                            value_text = f'{download_gb/1000:.1f}TB\n{efficiency_pct:.1f}%'
+                        elif download_gb >= 1:
+                            value_text = f'{download_gb:.1f}GB\n{efficiency_pct:.1f}%'
+                        else:
+                            value_text = f'{download_matrix[row_idx, col_idx]:.0f}MB\n{efficiency_pct:.1f}%'
+                    else:  # percentage
+                        # Show efficiency prominently, download as secondary
+                        if download_gb >= 1000:  # Use TB for very large values
+                            value_text = f'{efficiency_pct:.1f}%\n{download_gb/1000:.1f}TB'
+                        elif download_gb >= 1:
+                            value_text = f'{efficiency_pct:.1f}%\n{download_gb:.1f}GB'
+                        else:
+                            value_text = f'{efficiency_pct:.1f}%\n{download_matrix[row_idx, col_idx]:.0f}MB'
                         
                     ax.text(col_idx, row_idx, value_text, ha="center", va="center", 
                            color='black', fontweight='bold', fontsize=7)  # Smaller font for 4D matrix
@@ -420,7 +444,11 @@ def generate_combined_efficiency_matrix(base_folder):
     # Create comprehensive title
     img_size_str = ", ".join([f"{s:.3f}MB" for s in image_sizes])
     sat_count_str = ", ".join([f"{sc}" for sc in satellite_counts])
-    title = f'4D Data Download Volume Matrix (Shaded by Total GB Downloaded)\nImage Sizes: {img_size_str} | Satellite Counts: {sat_count_str}\nEach cell shows: Total Downloaded | Efficiency % | {better_text}'
+    
+    if metric == 'absdata':
+        title = f'4D Data Download Volume Matrix (Shaded by Total GB Downloaded)\nImage Sizes: {img_size_str} | Satellite Counts: {sat_count_str}\nEach cell shows: Total Downloaded | Efficiency % | {better_text}'
+    else:  # percentage
+        title = f'4D Data Download Efficiency Matrix (Shaded by Efficiency %)\nImage Sizes: {img_size_str} | Satellite Counts: {sat_count_str}\nEach cell shows: Efficiency % | Total Downloaded | {better_text}'
     
     # Titles and labels
     ax.set_title(title, fontsize=16, fontweight='bold', pad=25)
@@ -436,8 +464,13 @@ def generate_combined_efficiency_matrix(base_folder):
     
     plt.tight_layout()
     
-    # Save the plot
-    output_path = base_path.parent / 'combined_4d_efficiency_matrix.png'
+    # Save the plot with metric-specific filename
+    if metric == 'absdata':
+        output_filename = 'combined_4d_efficiency_matrix_absdata.png'
+    else:
+        output_filename = 'combined_4d_efficiency_matrix_percentage.png'
+    
+    output_path = base_path.parent / output_filename
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     print(f"\n✅ Combined 4D efficiency matrix saved: {output_path}")
@@ -481,9 +514,11 @@ def generate_combined_efficiency_matrix(base_folder):
 def main():
     parser = argparse.ArgumentParser(description='Generate combined 4D data efficiency matrix across image sizes and satellite counts')
     parser.add_argument('base_folder', help='Path to folder containing multiple analysis folders')
+    parser.add_argument('--metric', choices=['percentage', 'absdata'], default='percentage',
+                       help='Metric to visualize: percentage (efficiency %%) or absdata (absolute GB downloaded)')
     args = parser.parse_args()
     
-    generate_combined_efficiency_matrix(args.base_folder)
+    generate_combined_efficiency_matrix(args.base_folder, metric=args.metric)
 
 if __name__ == "__main__":
     main()
