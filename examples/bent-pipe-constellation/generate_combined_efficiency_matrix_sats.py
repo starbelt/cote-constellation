@@ -1,5 +1,20 @@
 #!/usr/bin/env python3
-"""Generate combined data efficiency matrix across all image sizes"""
+"""Generate combined data efficiency matrix across all image sizes
+
+CALCULATION METHOD (Updated to use visibility_log.csv):
+- NUMERATOR (Total Downloaded): Sum downloaded_mb where connected == 1
+  * downloaded_mb column contains actual drainBuffer() return values
+  * This fixes undercount bug from buffer decrease method (missed simultaneous events)
+  
+- DENOMINATOR (Total Buffered/Accumulated): Count image_taken flags × image_size_mb
+  * image_size_mb = bits_per_sense (from sensor.dat) ÷ 8 ÷ 1e6 (decimal MB)
+  * This fixes undercount bug from buffer increase method
+  
+- Efficiency = (Total Downloaded / Total Accumulated) × 100%
+  * How much of the buffered data was successfully downlinked
+
+See NUMERATOR_DENOMINATOR_FIX.md and COUNTING_BUG_EXPLANATION.md for details.
+"""
 
 import pandas as pd
 import numpy as np
@@ -13,11 +28,11 @@ import os
 import re
 
 def read_config_from_zip(zip_path):
-    """Read configuration from simulation_logs.zip"""
+    """Read configuration from simulation_logs.zip to get bits-per-sense"""
     config = {}
     try:
         with zipfile.ZipFile(zip_path, 'r') as zipf:
-            # Read sensor configuration - try multiple possible formats
+            # Read sensor configuration
             if 'configuration/sensor.dat' in zipf.namelist():
                 with zipf.open('configuration/sensor.dat') as f:
                     content = f.read().decode().strip()
@@ -28,9 +43,9 @@ def read_config_from_zip(zip_path):
                         # Format: bits-per-sense,pixel-count,pixel-size-m,focal-length-m,max-buffer-mb
                         data = lines[1].split(',')
                         if len(data) >= 1:
-                            # Calculate image size from bits-per-sense
+                            # Get bits-per-sense and convert to DECIMAL MB (÷ 1,000,000)
                             bits_per_sense = int(data[0])
-                            image_size_mb = bits_per_sense / (8 * 1024 * 1024)  # Convert bits to MB
+                            image_size_mb = (bits_per_sense / 8.0) / 1e6  # Decimal MB, not binary MiB
                             config['image_size'] = image_size_mb
                     else:
                         # Try the space-separated format
@@ -39,38 +54,48 @@ def read_config_from_zip(zip_path):
                                 config['image_size'] = float(line.split()[-1])
     except Exception as e:
         print(f"Warning: Could not read config from zip: {e}")
-        config['image_size'] = 0.289  # Default fallback
+        config['image_size'] = 29.360128  # Default fallback (234881024 bits in decimal MB)
     
     return config
 
 def calculate_total_data_accumulated(policy_dir, image_size):
-    """Calculate total data accumulated using buffer increase analysis (same as spacing comparison)"""
+    """Calculate total data accumulated using image_taken flags from visibility_log.csv"""
     total_accumulated = 0
     
     try:
-        # Find all buffer files for satellites
-        buffer_files = [f for f in os.listdir(policy_dir) if f.startswith('meas-MB-buffered-sat-') and f.endswith('.csv')]
+        # Read visibility_log.csv
+        visibility_log_path = policy_dir / 'visibility_log.csv'
         
-        for buffer_file in buffer_files:
-            buffer_path = policy_dir / buffer_file
+        if visibility_log_path.exists():
+            # Read the visibility log
+            df = pd.read_csv(visibility_log_path)
             
-            try:
-                buffer_df = pd.read_csv(buffer_path)
-                if len(buffer_df) > 1 and len(buffer_df.columns) >= 2:
-                    # Use the same method as spacing comparison - look at buffer increases
-                    buffer_col = buffer_df.columns[1]  # Second column has buffer data
-                    buffer_values = pd.to_numeric(buffer_df[buffer_col], errors='coerce').fillna(0)
+            # Count total images taken (image_taken == 1)
+            total_images = len(df[df['image_taken'] == 1])
+            
+            # Calculate total accumulated data
+            total_accumulated = total_images * image_size
+            
+        else:
+            print(f"      ⚠️  visibility_log.csv not found, using fallback method")
+            # Fallback to old method if visibility_log doesn't exist
+            buffer_files = [f for f in os.listdir(policy_dir) if f.startswith('meas-MB-buffered-sat-') and f.endswith('.csv')]
+            
+            for buffer_file in buffer_files:
+                buffer_path = policy_dir / buffer_file
+                
+                try:
+                    buffer_df = pd.read_csv(buffer_path)
+                    if len(buffer_df) > 1 and len(buffer_df.columns) >= 2:
+                        buffer_col = buffer_df.columns[1]
+                        buffer_values = pd.to_numeric(buffer_df[buffer_col], errors='coerce').fillna(0)
+                        buffer_increases = buffer_values.diff()
+                        satellite_accumulated = buffer_increases[buffer_increases > 0].sum()
+                        total_accumulated += satellite_accumulated
+                        
+                except Exception as e:
+                    continue
                     
-                    # Calculate buffer increases (data being added to satellite)
-                    buffer_increases = buffer_values.diff()
-                    # Sum all positive increases (ignore decreases which are downloads)
-                    satellite_accumulated = buffer_increases[buffer_increases > 0].sum()
-                    
-                    total_accumulated += satellite_accumulated
-                    
-            except Exception as e:
-                continue
-    
     except Exception as e:
         print(f"   Error calculating accumulated data: {e}")
         return 0
@@ -78,29 +103,39 @@ def calculate_total_data_accumulated(policy_dir, image_size):
     return total_accumulated
 
 def calculate_downloaded_data(policy_dir):
-    """Calculate total data downloaded using buffer decrease analysis (same as spacing comparison)"""
+    """Calculate total data downloaded using downloaded_mb column from visibility_log.csv"""
     total_downloaded = 0
     
     try:
-        # Process ALL buffer files for accurate totals (same method as spacing comparison)
-        buffer_files = [f for f in os.listdir(policy_dir) if f.startswith('meas-MB-buffered-sat-') and f.endswith('.csv')]
+        # Read visibility_log.csv
+        visibility_log_path = policy_dir / 'visibility_log.csv'
         
-        for buffer_file in buffer_files:
-            buffer_path = policy_dir / buffer_file
-            if buffer_path.exists():
-                try:
-                    buffer_df = pd.read_csv(buffer_path)
-                    if len(buffer_df) > 1 and len(buffer_df.columns) >= 2:
-                        # Use same method as multi_satellite_buffer_bars.py and spacing comparison
-                        buffer_col = buffer_df.columns[1]  # Second column has buffer data
-                        buffer_df['prev_value'] = buffer_df[buffer_col].shift(1)
-                        buffer_df['decrease'] = buffer_df['prev_value'] - buffer_df[buffer_col]
+        if visibility_log_path.exists():
+            # Read the visibility log
+            df = pd.read_csv(visibility_log_path)
+            
+            # Sum downloaded_mb where connected == 1
+            total_downloaded = df[df['connected'] == 1]['downloaded_mb'].sum()
+            
+        else:
+            print(f"      ⚠️  visibility_log.csv not found, using fallback method")
+            # Fallback to old method if visibility_log doesn't exist
+            buffer_files = [f for f in os.listdir(policy_dir) if f.startswith('meas-MB-buffered-sat-') and f.endswith('.csv')]
+            
+            for buffer_file in buffer_files:
+                buffer_path = policy_dir / buffer_file
+                if buffer_path.exists():
+                    try:
+                        buffer_df = pd.read_csv(buffer_path)
+                        if len(buffer_df) > 1 and len(buffer_df.columns) >= 2:
+                            buffer_col = buffer_df.columns[1]
+                            buffer_df['prev_value'] = buffer_df[buffer_col].shift(1)
+                            buffer_df['decrease'] = buffer_df['prev_value'] - buffer_df[buffer_col]
+                            satellite_downloaded = buffer_df[buffer_df['decrease'] > 0]['decrease'].sum()
+                            total_downloaded += satellite_downloaded
+                    except Exception:
+                        continue
                         
-                        # Sum all buffer decreases (data flowing out)
-                        satellite_downloaded = buffer_df[buffer_df['decrease'] > 0]['decrease'].sum()
-                        total_downloaded += satellite_downloaded
-                except Exception:
-                    continue
     except Exception as e:
         print(f"   Error calculating downloaded data: {e}")
         return 0

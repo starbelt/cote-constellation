@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
   // Set up visibility log CSV
   std::filesystem::path visibilityLogPath = logDirectory / "visibility_log.csv";
   std::ofstream visibilityLog(visibilityLogPath.string());
-  visibilityLog << "time,sat_id,in_view,connected,buffer_mb,image_taken,lat_deg,lon_deg,freshness_timestamp\n";
+  visibilityLog << "time,sat_id,in_view,connected,buffer_mb,downloaded_mb,image_taken,lat_deg,lon_deg,freshness_timestamp\n";
   // Set up date and time
   std::ifstream dateTimeHandle(dateTimeFile.string());
   std::string line = "";
@@ -292,6 +292,7 @@ int main(int argc, char** argv) {
   std::map<uint32_t, std::string> satId2ImageTimestamp;
   std::map<uint32_t, bool> satId2PrevInView;
   std::map<uint32_t, bool> satId2PrevConnected;
+  std::map<uint32_t, uint64_t> satId2DownloadedBits; // Track downloaded bits per timestep
   for(size_t i=0; i<satellites.size(); i++) {
     uint32_t id = satellites.at(i).getID();
     satId2ImageTaken[id] = false;
@@ -300,6 +301,7 @@ int main(int argc, char** argv) {
     satId2ImageTimestamp[id] = "";
     satId2PrevInView[id] = false;
     satId2PrevConnected[id] = false;
+    satId2DownloadedBits[id] = 0;
   }
   
   // Create scheduling policy and spacing strategy
@@ -317,6 +319,10 @@ int main(int argc, char** argv) {
     // Prepare simulation data
     //// Clear active channels
     downlinks.clear();
+    //// Reset downloaded bits for this timestep
+    for(size_t i=0; i<satellites.size(); i++) {
+      satId2DownloadedBits[satellites.at(i).getID()] = 0;
+    }
     //// Get the current time
     const double JD = cote::util::calcJulianDayFromYMD(
      dateTime.getYear(),dateTime.getMonth(),dateTime.getDay()
@@ -383,9 +389,12 @@ int main(int argc, char** argv) {
          )
         );
         // Drain data from satellite to ground station based on time step
-        satId2Sensor[SAT_ID]->drainBuffer(static_cast<uint64_t>(std::round(
+        // Capture the actual amount drained for visibility log
+        uint64_t bitsToDrain = static_cast<uint64_t>(std::round(
          static_cast<double>(downlinks.back().getBitsPerSec())*totalStepInSec
-        )));
+        ));
+        uint64_t bitsDrained = satId2Sensor[SAT_ID]->drainBuffer(bitsToDrain);
+        satId2DownloadedBits[SAT_ID] = bitsDrained;
       }
     }
     //// Sensor data collection logic
@@ -542,6 +551,9 @@ int main(int argc, char** argv) {
           // Get current buffer in MB
           double bufferMB = (static_cast<double>(satId2Sensor[SAT_ID]->getBitsBuffered())/8.0)/1.0e6;
           
+          // Get downloaded data in MB
+          double downloadedMB = (static_cast<double>(satId2DownloadedBits[SAT_ID])/8.0)/1.0e6;
+          
           // Get image data if taken this timestep
           double latDeg = imageTaken ? satId2ImageLat[SAT_ID] : 0.0;
           double lonDeg = imageTaken ? satId2ImageLon[SAT_ID] : 0.0;
@@ -553,6 +565,7 @@ int main(int argc, char** argv) {
                        << (inView ? 1 : 0) << ","
                        << (connected ? 1 : 0) << ","
                        << std::fixed << std::setprecision(6) << bufferMB << ","
+                       << std::fixed << std::setprecision(6) << downloadedMB << ","
                        << (imageTaken ? 1 : 0) << ","
                        << std::fixed << std::setprecision(6) << latDeg << ","
                        << std::fixed << std::setprecision(6) << lonDeg << ","
