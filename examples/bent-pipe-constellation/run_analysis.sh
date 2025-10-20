@@ -89,7 +89,24 @@ echo "📷 Image size: ${IMAGE_SIZE_MB} MB (code: ${IMAGE_SIZE_CODE})"
 BUFFER_MB=$(grep -v "^bits-per-sense" configuration/sensor.dat | cut -d',' -f5)
 
 # Define spacing strategies and link policies
-SPACING_STRATEGIES=("close-spaced" "close-orbit-spaced" "frame-spaced" "orbit-spaced")
+# If SINGLE_STRATEGY environment variable is set, only run that strategy
+if [ -n "$SINGLE_STRATEGY" ]; then
+    # Validate the single strategy
+    case "$SINGLE_STRATEGY" in
+        close-spaced|orbit-spaced|frame-spaced|close-orbit-spaced)
+            SPACING_STRATEGIES=("$SINGLE_STRATEGY")
+            echo "🎯 Single strategy mode: $SINGLE_STRATEGY"
+            ;;
+        *)
+            echo "❌ Error: Invalid SINGLE_STRATEGY='$SINGLE_STRATEGY'"
+            echo "   Valid options: close-spaced, orbit-spaced, frame-spaced, close-orbit-spaced"
+            exit 1
+            ;;
+    esac
+else
+    SPACING_STRATEGIES=("close-spaced" "close-orbit-spaced" "frame-spaced" "orbit-spaced")
+fi
+
 POLICIES=("sticky" "fifo" "roundrobin" "random")
 
 echo "📋 Configuration:"

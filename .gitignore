@@ -22,6 +22,7 @@ p3-env/
 *.zip
 simulation_summary.txt
 temp*
+constellation_analysis_*
 
 # Executables
 bent_pipe
