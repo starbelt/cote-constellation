@@ -10,8 +10,9 @@ Stacks: Each bar divided by 4 policies (STICKY, FIFO, ROUNDROBIN, RANDOM)
 Result: 4 charts (one per image size)
         16 stacked bars per chart (4 strategies × 4 constellation sizes)
 
-Idle Definition: buffer_mb > 0 AND connected = 0
-                 (satellite has data but is not downloading)
+Idle Definition: simulation_time - productive_time
+                 Productive = connected AND buffer > 0.001 MB
+                 (matches the matrix definition)
 """
 
 import pandas as pd
@@ -72,12 +73,14 @@ def scan_all_configurations(search_dir='.'):
     
     return pd.DataFrame(configs)
 
-def get_idle_time(zip_path, policy='fifo'):
+def get_idle_time(zip_path: str, policy: str) -> float:
     """
-    Calculate total idle time from visibility_log.csv in zip file
+    Extract total idle time from visibility_log.csv for a given policy.
     
-    Idle Definition: buffer_mb > 0 AND connected = 0
-                     (satellite has data but is not downloading)
+    Idle Definition: simulation_time - productive_time
+                     Productive = connected AND buffer > 0.001 MB
+    
+    This matches the definition used in generate_combined_total_idle_matrix.py
     
     Returns: Total idle time in hours
     """
@@ -86,11 +89,17 @@ def get_idle_time(zip_path, policy='fifo'):
             with zipf.open(f'{policy}/visibility_log.csv') as f:
                 df = pd.read_csv(f)
         
-        # Idle condition: has data in buffer but not connected
-        idle_entries = df[(df['buffer_mb'] > 0) & (df['connected'] == 0)]
+        # Simulation duration is 6 hours = 21600 seconds
+        sim_duration_seconds = 21600
         
-        # Each entry represents 10 seconds
-        idle_seconds = len(idle_entries) * 10
+        # Productive condition: connected AND has meaningful data in buffer
+        productive_entries = df[(df['connected'] == 1) & (df['buffer_mb'] > 0.001)]
+        
+        # Each entry represents 1 second (visibility_log is per-second data)
+        productive_seconds = len(productive_entries) * 1
+        
+        # Total idle time = simulation duration - productive time
+        idle_seconds = sim_duration_seconds - productive_seconds
         idle_hours = idle_seconds / 3600
         
         return idle_hours
@@ -175,7 +184,7 @@ def create_stacked_bar_chart(df: pd.DataFrame, image_size_kb: int) -> None:
     # Plot stacked bars
     for x_pos, label in zip(x_positions, x_labels):
         # Determine strategy and num_sats for this position
-        group_idx = x_pos // (group_width + group_gap)
+        group_idx = int(x_pos // (group_width + group_gap))
         bar_idx = int(x_pos % (group_width + group_gap))
         
         strategy = STRATEGIES[group_idx]

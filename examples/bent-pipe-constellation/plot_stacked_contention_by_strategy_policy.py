@@ -175,7 +175,7 @@ def create_stacked_bar_chart(df: pd.DataFrame, image_size_kb: int) -> None:
     # Plot stacked bars
     for x_pos, label in zip(x_positions, x_labels):
         # Determine strategy and num_sats for this position
-        group_idx = x_pos // (group_width + group_gap)
+        group_idx = int(x_pos // (group_width + group_gap))
         bar_idx = int(x_pos % (group_width + group_gap))
         
         strategy = STRATEGIES[group_idx]
