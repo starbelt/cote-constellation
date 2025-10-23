@@ -41,6 +41,7 @@
 #include "PolicyFactory.hpp" // Scheduling policies
 #include "SpacingFactory.hpp" // Spacing strategies
 #include "CloseOrbitSpacedStrategy.hpp" // For cluster initialization
+#include "VisibilityLogger.hpp" // Visibility logging utility
 
 int main(int argc, char** argv) {
   // Set up variables
@@ -113,10 +114,9 @@ int main(int argc, char** argv) {
   std::filesystem::create_directories(logDirectory);
   cote::Log log(levels,logDirectory.string());
   
-  // Set up visibility log CSV
-  std::filesystem::path visibilityLogPath = logDirectory / "visibility_log.csv";
-  std::ofstream visibilityLog(visibilityLogPath.string());
-  visibilityLog << "time,sat_id,in_view,connected,buffer_mb,downloaded_mb,image_taken,lat_deg,lon_deg,freshness_timestamp\n";
+  // Set up visibility logger
+  VisibilityLogger visibilityLogger(logDirectory);
+  
   // Set up date and time
   std::ifstream dateTimeHandle(dateTimeFile.string());
   std::string line = "";
@@ -554,22 +554,59 @@ int main(int argc, char** argv) {
           // Get downloaded data in MB
           double downloadedMB = (static_cast<double>(satId2DownloadedBits[SAT_ID])/8.0)/1.0e6;
           
-          // Get image data if taken this timestep
-          double latDeg = imageTaken ? satId2ImageLat[SAT_ID] : 0.0;
-          double lonDeg = imageTaken ? satId2ImageLon[SAT_ID] : 0.0;
+          // Get satellite current position (subpoint lat/lon)
+          const std::array<double,3> satEciPosn = satellites.at(i).getECIPosn();
+          double latDeg = imageTaken ? satId2ImageLat[SAT_ID] : cote::util::calcSubpointLatitude(satEciPosn);
+          double lonDeg = imageTaken ? satId2ImageLon[SAT_ID] : cote::util::calcSubpointLongitude(JD, SEC, NS, satEciPosn);
           std::string timestamp = imageTaken ? satId2ImageTimestamp[SAT_ID] : "";
           
-          // Write CSV row
-          visibilityLog << simTimeSeconds << ","
-                       << SAT_ID << ","
-                       << (inView ? 1 : 0) << ","
-                       << (connected ? 1 : 0) << ","
-                       << std::fixed << std::setprecision(6) << bufferMB << ","
-                       << std::fixed << std::setprecision(6) << downloadedMB << ","
-                       << (imageTaken ? 1 : 0) << ","
-                       << std::fixed << std::setprecision(6) << latDeg << ","
-                       << std::fixed << std::setprecision(6) << lonDeg << ","
-                       << timestamp << "\n";
+          // Calculate distance and elevation for in-view or connected satellites
+          double distanceKm = 0.0;
+          double elevationDeg = 0.0;
+          if(inView || connected) {
+            // Find the closest ground station with elevation >= 10 degrees
+            double minDistance = 1e9;
+            size_t bestGndIdx = 0;
+            bool foundStation = false;
+            
+            for(size_t j=0; j<groundStations.size(); j++) {
+              const double GND_LAT = groundStations.at(j).getLatitude();
+              const double GND_LON = groundStations.at(j).getLongitude();
+              const double GND_HAE = groundStations.at(j).getHAE();
+              const std::array<double,3> gndEciPosn = groundStations.at(j).getECIPosn();
+              
+              double elev = cote::util::calcElevationDeg(JD,SEC,NS,GND_LAT,GND_LON,GND_HAE,satEciPosn);
+              if(elev >= 10.0) {
+                double dist = cote::util::magnitude(
+                  cote::util::calcSeparationVector(satEciPosn, gndEciPosn)
+                );
+                if(dist < minDistance) {
+                  minDistance = dist;
+                  bestGndIdx = j;
+                  foundStation = true;
+                }
+              }
+            }
+            
+            if(foundStation) {
+              const double GND_LAT = groundStations.at(bestGndIdx).getLatitude();
+              const double GND_LON = groundStations.at(bestGndIdx).getLongitude();
+              const double GND_HAE = groundStations.at(bestGndIdx).getHAE();
+              const std::array<double,3> gndEciPosn = groundStations.at(bestGndIdx).getECIPosn();
+              
+              distanceKm = cote::util::magnitude(
+                cote::util::calcSeparationVector(satEciPosn, gndEciPosn)
+              );
+              elevationDeg = cote::util::calcElevationDeg(JD,SEC,NS,GND_LAT,GND_LON,GND_HAE,satEciPosn);
+            }
+          }
+          
+          // Write to visibility log
+          visibilityLogger.writeEntry(
+            simTimeSeconds, SAT_ID, (inView ? 1 : 0), (connected ? 1 : 0),
+            bufferMB, downloadedMB, (imageTaken ? 1 : 0),
+            latDeg, lonDeg, timestamp, distanceKm, elevationDeg
+          );
         }
         
         // Update previous state tracking
@@ -603,8 +640,8 @@ int main(int argc, char** argv) {
   // Write out logs
   log.writeAll();
   
-  // Close visibility log
-  visibilityLog.close();
+  // Close visibility logger
+  visibilityLogger.close();
   
   // Clean up
   for(
