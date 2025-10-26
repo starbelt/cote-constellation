@@ -1,0 +1,1039 @@
+
+================================================================================
+Generating CZML files for ALL configurations
+Total combinations: 256
+================================================================================
+
+
+[1/256] orbit-spaced | fifo | 01 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[2/256] orbit-spaced | sticky | 01 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[3/256] orbit-spaced | random | 01 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[4/256] orbit-spaced | roundrobin | 01 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[5/256] close-orbit-spaced | fifo | 01 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[6/256] close-orbit-spaced | sticky | 01 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[7/256] close-orbit-spaced | random | 01 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[8/256] close-orbit-spaced | roundrobin | 01 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[9/256] close-spaced | fifo | 01 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[10/256] close-spaced | sticky | 01 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[11/256] close-spaced | random | 01 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[12/256] close-spaced | roundrobin | 01 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[13/256] frame-spaced | fifo | 01 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[14/256] frame-spaced | sticky | 01 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[15/256] frame-spaced | random | 01 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[16/256] frame-spaced | roundrobin | 01 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_170000_00027_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[17/256] orbit-spaced | fifo | 50 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[18/256] orbit-spaced | sticky | 50 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[19/256] orbit-spaced | random | 50 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[20/256] orbit-spaced | roundrobin | 50 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[21/256] close-orbit-spaced | fifo | 50 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[22/256] close-orbit-spaced | sticky | 50 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[23/256] close-orbit-spaced | random | 50 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[24/256] close-orbit-spaced | roundrobin | 50 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[25/256] close-spaced | fifo | 50 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[26/256] close-spaced | sticky | 50 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[27/256] close-spaced | random | 50 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[28/256] close-spaced | roundrobin | 50 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[29/256] frame-spaced | fifo | 50 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[30/256] frame-spaced | sticky | 50 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[31/256] frame-spaced | random | 50 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[32/256] frame-spaced | roundrobin | 50 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_170029_00027_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[33/256] orbit-spaced | fifo | 100 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[34/256] orbit-spaced | sticky | 100 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[35/256] orbit-spaced | random | 100 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[36/256] orbit-spaced | roundrobin | 100 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[37/256] close-orbit-spaced | fifo | 100 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[38/256] close-orbit-spaced | sticky | 100 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[39/256] close-orbit-spaced | random | 100 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[40/256] close-orbit-spaced | roundrobin | 100 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[41/256] close-spaced | fifo | 100 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[42/256] close-spaced | sticky | 100 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[43/256] close-spaced | random | 100 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[44/256] close-spaced | roundrobin | 100 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[45/256] frame-spaced | fifo | 100 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[46/256] frame-spaced | sticky | 100 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[47/256] frame-spaced | random | 100 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[48/256] frame-spaced | roundrobin | 100 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_171204_00027_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[49/256] orbit-spaced | fifo | 200 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[50/256] orbit-spaced | sticky | 200 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[51/256] orbit-spaced | random | 200 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[52/256] orbit-spaced | roundrobin | 200 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[53/256] close-orbit-spaced | fifo | 200 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[54/256] close-orbit-spaced | sticky | 200 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[55/256] close-orbit-spaced | random | 200 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[56/256] close-orbit-spaced | roundrobin | 200 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[57/256] close-spaced | fifo | 200 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[58/256] close-spaced | sticky | 200 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[59/256] close-spaced | random | 200 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[60/256] close-spaced | roundrobin | 200 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[61/256] frame-spaced | fifo | 200 sats | 00027
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[62/256] frame-spaced | sticky | 200 sats | 00027
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[63/256] frame-spaced | random | 200 sats | 00027
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[64/256] frame-spaced | roundrobin | 200 sats | 00027
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_173521_00027_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[65/256] orbit-spaced | fifo | 01 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[66/256] orbit-spaced | sticky | 01 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[67/256] orbit-spaced | random | 01 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[68/256] orbit-spaced | roundrobin | 01 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[69/256] close-orbit-spaced | fifo | 01 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[70/256] close-orbit-spaced | sticky | 01 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[71/256] close-orbit-spaced | random | 01 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[72/256] close-orbit-spaced | roundrobin | 01 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[73/256] close-spaced | fifo | 01 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[74/256] close-spaced | sticky | 01 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[75/256] close-spaced | random | 01 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[76/256] close-spaced | roundrobin | 01 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[77/256] frame-spaced | fifo | 01 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[78/256] frame-spaced | sticky | 01 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[79/256] frame-spaced | random | 01 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[80/256] frame-spaced | roundrobin | 01 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_182439_00279_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[81/256] orbit-spaced | fifo | 50 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[82/256] orbit-spaced | sticky | 50 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[83/256] orbit-spaced | random | 50 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[84/256] orbit-spaced | roundrobin | 50 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[85/256] close-orbit-spaced | fifo | 50 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[86/256] close-orbit-spaced | sticky | 50 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[87/256] close-orbit-spaced | random | 50 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[88/256] close-orbit-spaced | roundrobin | 50 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[89/256] close-spaced | fifo | 50 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[90/256] close-spaced | sticky | 50 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[91/256] close-spaced | random | 50 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[92/256] close-spaced | roundrobin | 50 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[93/256] frame-spaced | fifo | 50 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[94/256] frame-spaced | sticky | 50 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[95/256] frame-spaced | random | 50 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[96/256] frame-spaced | roundrobin | 50 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_182518_00279_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[97/256] orbit-spaced | fifo | 100 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[98/256] orbit-spaced | sticky | 100 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[99/256] orbit-spaced | random | 100 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[100/256] orbit-spaced | roundrobin | 100 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[101/256] close-orbit-spaced | fifo | 100 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[102/256] close-orbit-spaced | sticky | 100 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[103/256] close-orbit-spaced | random | 100 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[104/256] close-orbit-spaced | roundrobin | 100 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[105/256] close-spaced | fifo | 100 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[106/256] close-spaced | sticky | 100 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[107/256] close-spaced | random | 100 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[108/256] close-spaced | roundrobin | 100 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[109/256] frame-spaced | fifo | 100 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[110/256] frame-spaced | sticky | 100 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[111/256] frame-spaced | random | 100 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[112/256] frame-spaced | roundrobin | 100 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_183657_00279_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[113/256] orbit-spaced | fifo | 200 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[114/256] orbit-spaced | sticky | 200 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[115/256] orbit-spaced | random | 200 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[116/256] orbit-spaced | roundrobin | 200 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[117/256] close-orbit-spaced | fifo | 200 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[118/256] close-orbit-spaced | sticky | 200 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[119/256] close-orbit-spaced | random | 200 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[120/256] close-orbit-spaced | roundrobin | 200 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[121/256] close-spaced | fifo | 200 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[122/256] close-spaced | sticky | 200 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[123/256] close-spaced | random | 200 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[124/256] close-spaced | roundrobin | 200 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[125/256] frame-spaced | fifo | 200 sats | 00279
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[126/256] frame-spaced | sticky | 200 sats | 00279
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[127/256] frame-spaced | random | 200 sats | 00279
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[128/256] frame-spaced | roundrobin | 200 sats | 00279
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_190047_00279_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[129/256] orbit-spaced | fifo | 01 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[130/256] orbit-spaced | sticky | 01 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[131/256] orbit-spaced | random | 01 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[132/256] orbit-spaced | roundrobin | 01 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[133/256] close-orbit-spaced | fifo | 01 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[134/256] close-orbit-spaced | sticky | 01 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[135/256] close-orbit-spaced | random | 01 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[136/256] close-orbit-spaced | roundrobin | 01 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[137/256] close-spaced | fifo | 01 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[138/256] close-spaced | sticky | 01 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[139/256] close-spaced | random | 01 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[140/256] close-spaced | roundrobin | 01 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[141/256] frame-spaced | fifo | 01 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[142/256] frame-spaced | sticky | 01 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[143/256] frame-spaced | random | 01 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[144/256] frame-spaced | roundrobin | 01 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_195835_02799_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[145/256] orbit-spaced | fifo | 50 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[146/256] orbit-spaced | sticky | 50 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[147/256] orbit-spaced | random | 50 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[148/256] orbit-spaced | roundrobin | 50 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[149/256] close-orbit-spaced | fifo | 50 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[150/256] close-orbit-spaced | sticky | 50 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[151/256] close-orbit-spaced | random | 50 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[152/256] close-orbit-spaced | roundrobin | 50 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[153/256] close-spaced | fifo | 50 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[154/256] close-spaced | sticky | 50 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[155/256] close-spaced | random | 50 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[156/256] close-spaced | roundrobin | 50 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[157/256] frame-spaced | fifo | 50 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[158/256] frame-spaced | sticky | 50 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[159/256] frame-spaced | random | 50 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[160/256] frame-spaced | roundrobin | 50 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_195920_02799_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[161/256] orbit-spaced | fifo | 100 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[162/256] orbit-spaced | sticky | 100 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[163/256] orbit-spaced | random | 100 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[164/256] orbit-spaced | roundrobin | 100 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[165/256] close-orbit-spaced | fifo | 100 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[166/256] close-orbit-spaced | sticky | 100 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[167/256] close-orbit-spaced | random | 100 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[168/256] close-orbit-spaced | roundrobin | 100 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[169/256] close-spaced | fifo | 100 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[170/256] close-spaced | sticky | 100 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[171/256] close-spaced | random | 100 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[172/256] close-spaced | roundrobin | 100 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[173/256] frame-spaced | fifo | 100 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[174/256] frame-spaced | sticky | 100 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[175/256] frame-spaced | random | 100 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[176/256] frame-spaced | roundrobin | 100 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_201325_02799_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[177/256] orbit-spaced | fifo | 200 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[178/256] orbit-spaced | sticky | 200 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[179/256] orbit-spaced | random | 200 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[180/256] orbit-spaced | roundrobin | 200 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[181/256] close-orbit-spaced | fifo | 200 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[182/256] close-orbit-spaced | sticky | 200 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[183/256] close-orbit-spaced | random | 200 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[184/256] close-orbit-spaced | roundrobin | 200 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[185/256] close-spaced | fifo | 200 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[186/256] close-spaced | sticky | 200 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[187/256] close-spaced | random | 200 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[188/256] close-spaced | roundrobin | 200 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[189/256] frame-spaced | fifo | 200 sats | 02799
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[190/256] frame-spaced | sticky | 200 sats | 02799
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[191/256] frame-spaced | random | 200 sats | 02799
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[192/256] frame-spaced | roundrobin | 200 sats | 02799
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_203816_02799_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[193/256] orbit-spaced | fifo | 01 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[194/256] orbit-spaced | sticky | 01 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[195/256] orbit-spaced | random | 01 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[196/256] orbit-spaced | roundrobin | 01 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[197/256] close-orbit-spaced | fifo | 01 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[198/256] close-orbit-spaced | sticky | 01 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[199/256] close-orbit-spaced | random | 01 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[200/256] close-orbit-spaced | roundrobin | 01 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[201/256] close-spaced | fifo | 01 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[202/256] close-spaced | sticky | 01 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[203/256] close-spaced | random | 01 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[204/256] close-spaced | roundrobin | 01 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[205/256] frame-spaced | fifo | 01 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[206/256] frame-spaced | sticky | 01 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[207/256] frame-spaced | random | 01 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[208/256] frame-spaced | roundrobin | 01 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_212850_28000_01/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[209/256] orbit-spaced | fifo | 50 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[210/256] orbit-spaced | sticky | 50 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[211/256] orbit-spaced | random | 50 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[212/256] orbit-spaced | roundrobin | 50 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[213/256] close-orbit-spaced | fifo | 50 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[214/256] close-orbit-spaced | sticky | 50 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[215/256] close-orbit-spaced | random | 50 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[216/256] close-orbit-spaced | roundrobin | 50 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[217/256] close-spaced | fifo | 50 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[218/256] close-spaced | sticky | 50 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[219/256] close-spaced | random | 50 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[220/256] close-spaced | roundrobin | 50 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[221/256] frame-spaced | fifo | 50 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[222/256] frame-spaced | sticky | 50 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[223/256] frame-spaced | random | 50 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[224/256] frame-spaced | roundrobin | 50 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_212931_28000_50/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[225/256] orbit-spaced | fifo | 100 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[226/256] orbit-spaced | sticky | 100 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[227/256] orbit-spaced | random | 100 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[228/256] orbit-spaced | roundrobin | 100 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[229/256] close-orbit-spaced | fifo | 100 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[230/256] close-orbit-spaced | sticky | 100 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[231/256] close-orbit-spaced | random | 100 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[232/256] close-orbit-spaced | roundrobin | 100 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[233/256] close-spaced | fifo | 100 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[234/256] close-spaced | sticky | 100 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[235/256] close-spaced | random | 100 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[236/256] close-spaced | roundrobin | 100 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[237/256] frame-spaced | fifo | 100 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[238/256] frame-spaced | sticky | 100 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[239/256] frame-spaced | random | 100 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[240/256] frame-spaced | roundrobin | 100 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_214230_28000_100/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[241/256] orbit-spaced | fifo | 200 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[242/256] orbit-spaced | sticky | 200 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[243/256] orbit-spaced | random | 200 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[244/256] orbit-spaced | roundrobin | 200 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[245/256] close-orbit-spaced | fifo | 200 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[246/256] close-orbit-spaced | sticky | 200 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[247/256] close-orbit-spaced | random | 200 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[248/256] close-orbit-spaced | roundrobin | 200 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/close-orbit-spaced/simulation_logs.zip
+  ✅ Generated
+
+[249/256] close-spaced | fifo | 200 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[250/256] close-spaced | sticky | 200 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[251/256] close-spaced | random | 200 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[252/256] close-spaced | roundrobin | 200 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/close-spaced/simulation_logs.zip
+  ✅ Generated
+
+[253/256] frame-spaced | fifo | 200 sats | 28000
+  📦 Extracting fifo/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[254/256] frame-spaced | sticky | 200 sats | 28000
+  📦 Extracting sticky/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[255/256] frame-spaced | random | 200 sats | 28000
+  📦 Extracting random/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+[256/256] frame-spaced | roundrobin | 200 sats | 28000
+  📦 Extracting roundrobin/visibility_log.csv from constellation_analysis_20251022_220920_28000_200/frame-spaced/simulation_logs.zip
+  ✅ Generated
+
+================================================================================
+SUMMARY
+================================================================================
+✅ Generated: 256
+⚠️  Skipped:   0
+❌ Failed:    0
+================================================================================
+
