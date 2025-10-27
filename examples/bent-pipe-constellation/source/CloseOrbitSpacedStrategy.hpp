@@ -3,6 +3,8 @@
 
 #include "SpacingStrategy.hpp"
 #include <utilities.hpp>
+#include <algorithm>  // for std::sort
+#include <iomanip>    // for std::setfill, std::setw
 
 class CloseOrbitSpacedStrategy : public SpacingStrategy {
 public:
@@ -18,59 +20,10 @@ public:
     // - 200 sats: 50 positions × 4 sats (propagate 3 extras at 3km = 12km/4)
 
     void initialize(std::vector<cote::Satellite>& satellites) {
-        const size_t totalSats = satellites.size();
-        
-        // Special case: 1 satellite - no clustering needed
-        if (totalSats == 1) {
-            std::cout << "close-orbit-spaced: 1 satellite, no clustering" << std::endl;
-            return;
-        }
-        
-        // Calculate satellites per orbital position
-        const size_t ORBITAL_POSITIONS = 50;
-        const size_t satsPerPosition = totalSats / ORBITAL_POSITIONS;
-        
-        // Special case: 50 satellites - already correctly positioned, no re-phasing needed
-        if (totalSats == 50) {
-            std::cout << "close-orbit-spaced: 50 satellites = 50 positions × 1 sat (matches orbit-spaced)" << std::endl;
-            return;
-        }
-        
-        // Calculate spacing within clusters
-        // Cluster footprint: 12 km constant
-        // Spacing within cluster = 12km / satsPerPosition
-        const double CLUSTER_FOOTPRINT_KM = 12.0;
-        const double spacingWithinCluster_km = CLUSTER_FOOTPRINT_KM / static_cast<double>(satsPerPosition);
-        
-        // Orbital velocity: approximately 7.8 km/s at 550 km altitude
-        const double ORBITAL_VELOCITY_KM_S = 7.8;
-        const double spacingWithinCluster_sec = spacingWithinCluster_km / ORBITAL_VELOCITY_KM_S;
-        
-        std::cout << "close-orbit-spaced: " << totalSats << " satellites = " 
-                  << ORBITAL_POSITIONS << " positions × " << satsPerPosition 
-                  << " sats, spacing within cluster: " << spacingWithinCluster_km << " km ("
-                  << spacingWithinCluster_sec << " sec)" << std::endl;
-        
-        // Re-phase satellites to create clusters
-        // Satellites 0-(satsPerPosition-1) are at position 0
-        // Satellites satsPerPosition-(2*satsPerPosition-1) are at position 1, etc.
-        for (size_t pos = 0; pos < ORBITAL_POSITIONS; pos++) {
-            for (size_t satInCluster = 1; satInCluster < satsPerPosition; satInCluster++) {
-                size_t satIndex = pos * satsPerPosition + satInCluster;
-                if (satIndex >= totalSats) break;
-                
-                // Get the lead satellite for this position (first in cluster)
-                size_t leadSatIndex = pos * satsPerPosition;
-                cote::DateTime leadTime = satellites.at(leadSatIndex).getLocalTime();
-                
-                // Advance by (satInCluster * spacingWithinCluster_sec) seconds
-                double advanceSeconds = static_cast<double>(satInCluster) * spacingWithinCluster_sec;
-                advanceBySeconds(leadTime, advanceSeconds);
-                
-                // Update satellite position and time
-                satellites.at(satIndex).setLocalTime(leadTime);
-            }
-        }
+        // BASELINE: Do absolutely nothing. Just use satellites exactly as loaded.
+        std::cout << "close-orbit-spaced: " << satellites.size() 
+                  << " satellites (baseline, no modifications)" << std::endl;
+        return;
     }
 
 private:
