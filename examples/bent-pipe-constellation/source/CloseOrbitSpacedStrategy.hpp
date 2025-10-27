@@ -20,10 +20,50 @@ public:
     // - 200 sats: 50 positions × 4 sats (propagate 3 extras at 3km = 12km/4)
 
     void initialize(std::vector<cote::Satellite>& satellites) {
-        // BASELINE: Do absolutely nothing. Just use satellites exactly as loaded.
-        std::cout << "close-orbit-spaced: " << satellites.size() 
-                  << " satellites (baseline, no modifications)" << std::endl;
-        return;
+        const size_t satCount = satellites.size();
+        std::cout << "close-orbit-spaced: " << satCount << " satellites" << std::endl;
+        
+        // 50 sats: No clustering (baseline complete)
+        if (satCount == 50) {
+            std::cout << "  → 50 sats: baseline (no clustering)" << std::endl;
+            return;
+        }
+        
+        // Cluster all satellites
+        // 100 sats: 50 clusters of 2 (base sats: 000, 002, 004, 006, ...)
+        // 200 sats: 50 clusters of 4 (base sats: 000, 004, 008, 012, ...)
+        const double orbitalVelocity = 7.5;  // km/s (approximate LEO velocity)
+        size_t clusterSize;
+        double targetSeparationKm;
+        
+        if (satCount == 100) {
+            clusterSize = 2;
+            targetSeparationKm = 12.0;  // 12km spacing within cluster
+        } else {  // 200 sats
+            clusterSize = 4;
+            targetSeparationKm = 4.0;   // 4km spacing within cluster
+        }
+        
+        const double timeOffsetSec = targetSeparationKm / orbitalVelocity;
+        size_t clustersPositioned = 0;
+        
+        // Process each cluster
+        for (size_t i = 0; i < satCount; i += clusterSize) {
+            // Satellite i is the base/lead of this cluster
+            cote::DateTime baseTime = satellites[i].getLocalTime();
+            
+            // Position the remaining satellites in this cluster behind the base
+            for (size_t j = 1; j < clusterSize && (i + j) < satCount; j++) {
+                cote::DateTime followerTime = baseTime;
+                // Each follower is offset by j * timeOffsetSec behind the base
+                advanceBySeconds(followerTime, j * timeOffsetSec);
+                satellites[i + j].setLocalTime(followerTime);
+            }
+            clustersPositioned++;
+        }
+        
+        std::cout << "  → Positioned " << clustersPositioned << " clusters of " << clusterSize 
+                  << " satellites (" << targetSeparationKm << " km spacing)" << std::endl;
     }
 
 private:
