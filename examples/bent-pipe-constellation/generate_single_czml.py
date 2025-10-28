@@ -14,7 +14,7 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
     # Extract image size from analysis_dir (e.g., constellation_analysis_20251022_183657_00279_100)
     # Format: constellation_analysis_YYYYMMDD_HHMMSS_IMAGESIZE_CONSTELSIZE
     dir_parts = Path(analysis_dir).name.split('_')
-    image_size = dir_parts[3] if len(dir_parts) >= 4 else "unknown"
+    image_size = dir_parts[4] if len(dir_parts) >= 5 else "unknown"
     
     print(f"\n{'='*80}")
     print(f"Generating: {spacing}, {policy}, {size} satellites, {image_size} MB")
@@ -30,8 +30,8 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
     
     df = pd.read_csv(vis_log_path)
     
-    # Limit to 5 seconds for fast baseline iteration
-    df = df[df['time'] <= 5].copy()
+    # Limit to 2 minutes (120 seconds) for smaller CZML files
+    df = df[df['time'] <= 120].copy()
     
     print(f"  Data points: {len(df)} rows")
     print(f"  Time range: {df['time'].min()} - {df['time'].max()} seconds")
@@ -57,6 +57,46 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
         }
     }]
     
+    # Determine sats per base orbital position (50 positions)
+    try:
+        size_int = int(size)
+    except Exception:
+        size_int = 50
+    sats_per_position = max(1, size_int // 50)
+
+    # Build ground station color intervals based on whether any satellites are in view
+    gs_color_intervals = []
+    times = sorted(df['time'].unique())
+    current_has_sats = None
+    interval_start = None
+    
+    for time_val in times:
+        time_str = (start_time + timedelta(seconds=float(time_val))).isoformat() + "Z"
+        sats_in_view = df[(df['time'] == time_val) & (df['in_view'] == 1)]
+        has_sats = len(sats_in_view) > 0
+        
+        if current_has_sats is None:
+            current_has_sats = has_sats
+            interval_start = time_str
+            continue
+        
+        if has_sats != current_has_sats:
+            color = [0, 255, 0, 255] if current_has_sats else [128, 128, 128, 255]
+            gs_color_intervals.append({
+                "interval": f"{interval_start}/{time_str}",
+                "rgba": color
+            })
+            interval_start = time_str
+            current_has_sats = has_sats
+    
+    # Close final interval
+    last_time_val = (start_time + timedelta(seconds=float(times[-1]))).isoformat() + "Z"
+    color = [0, 255, 0, 255] if current_has_sats else [128, 128, 128, 255]
+    gs_color_intervals.append({
+        "interval": f"{interval_start}/{last_time_val}",
+        "rgba": color
+    })
+    
     # Add ground station
     czml.append({
         "id": "GroundStation",
@@ -65,8 +105,8 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
             "cartographicDegrees": [gs_lon, gs_lat, gs_alt]
         },
         "point": {
-            "pixelSize": 10,
-            "color": {"rgba": [255, 0, 0, 255]}
+            "pixelSize": 14,
+            "color": gs_color_intervals
         },
         "label": {
             "text": "Svalbard GS",
@@ -75,16 +115,9 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
             "outlineColor": {"rgba": [0, 0, 0, 255]},
             "outlineWidth": 2,
             "style": "FILL_AND_OUTLINE",
-            "pixelOffset": {"cartesian2": [15, 0]}
+            "pixelOffset": {"cartesian2": [0, -15]}
         }
     })
-    
-    # Determine sats per base orbital position (50 positions)
-    try:
-        size_int = int(size)
-    except Exception:
-        size_int = 50
-    sats_per_position = max(1, size_int // 50)
 
     # Lead/cluster palette (distinct colors to follow cluster order visually)
     lead_palette = [
@@ -113,8 +146,10 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
                 row['lon_deg'], row['lat_deg'], 500000  # 500km altitude for visibility
             ])
         
-        # Build color intervals (grey=out of view, white=in view, green=connected)
+        # Build color intervals (grey=out of view, purple=in view/contention, green=connected)
         color_intervals = []
+        pixelsize_intervals = []
+        label_bg_intervals = []
         current_state = None  # Track state: 'out', 'in_view', 'connected'
         interval_start = None
         first_time = (start_time + timedelta(seconds=float(sat_df.iloc[0]['time']))).isoformat() + "Z"
@@ -126,18 +161,26 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
             if row['connected'] == 1:
                 new_state = 'connected'
                 color = [0, 255, 0, 255]  # Green
+                pixel_size = 16  # Double size for connected
+                label_bg = [0, 128, 0, 200]  # Green background
             elif row['in_view'] == 1:
                 new_state = 'in_view'
-                color = [255, 255, 255, 255]  # White
+                color = [200, 0, 255, 255]  # Purple (contention)
+                pixel_size = 8  # Normal size
+                label_bg = [100, 0, 128, 200]  # Purple background
             else:
                 new_state = 'out'
                 color = [128, 128, 128, 255]  # Grey
+                pixel_size = 8  # Normal size
+                label_bg = [80, 80, 80, 200]  # Grey background
             
             # Start first interval
             if current_state is None:
                 current_state = new_state
                 interval_start = time_str
                 current_color = color
+                current_pixel_size = pixel_size
+                current_label_bg = label_bg
                 continue
             
             # State changed - close previous interval
@@ -146,9 +189,19 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
                     "interval": f"{interval_start}/{time_str}",
                     "rgba": current_color
                 })
+                pixelsize_intervals.append({
+                    "interval": f"{interval_start}/{time_str}",
+                    "number": current_pixel_size
+                })
+                label_bg_intervals.append({
+                    "interval": f"{interval_start}/{time_str}",
+                    "rgba": current_label_bg
+                })
                 interval_start = time_str
                 current_state = new_state
                 current_color = color
+                current_pixel_size = pixel_size
+                current_label_bg = label_bg
         
         # Close final interval
         last_time = (start_time + timedelta(seconds=float(sat_df.iloc[-1]['time']))).isoformat() + "Z"
@@ -156,20 +209,63 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
             "interval": f"{interval_start}/{last_time}",
             "rgba": current_color
         })
+        pixelsize_intervals.append({
+            "interval": f"{interval_start}/{last_time}",
+            "number": current_pixel_size
+        })
+        label_bg_intervals.append({
+            "interval": f"{interval_start}/{last_time}",
+            "rgba": current_label_bg
+        })
         
         # Determine satellite number, cluster index and base/lead status
         sat_num = int(sat_id) % 1000
         cluster_idx = sat_num // sats_per_position
         is_lead = (sat_num % sats_per_position == 0)
 
-        # Labels: always show simple static label with satellite index
+        # Labels: dynamic label with satellite index + elevation/distance when connected
         label_text_intervals = []
         label_show_intervals = []
+        
+        current_label_text = None
+        interval_start = None
         first_time = (start_time + timedelta(seconds=float(sat_df.iloc[0]['time']))).isoformat() + "Z"
+        
+        for _, row in sat_df.iterrows():
+            time_str = (start_time + timedelta(seconds=float(row['time']))).isoformat() + "Z"
+            
+            # Build label text based on connection status
+            if row['connected'] == 1:
+                # Show sat number + elevation + distance when connected
+                elev = row['elevation_deg']
+                dist = row['distance_km']
+                new_label_text = f"{sat_num:03d}\nEl:{elev:.1f}°\n{dist:.0f}km"
+            else:
+                # Just show sat number when not connected
+                new_label_text = f"{sat_num:03d}"
+            
+            # Start first interval
+            if current_label_text is None:
+                current_label_text = new_label_text
+                interval_start = time_str
+                continue
+            
+            # Label text changed - close previous interval
+            if new_label_text != current_label_text:
+                label_text_intervals.append({
+                    "interval": f"{interval_start}/{time_str}",
+                    "string": current_label_text
+                })
+                interval_start = time_str
+                current_label_text = new_label_text
+        
+        # Close final interval
         label_text_intervals.append({
-            "interval": f"{first_time}/{last_time}",
-            "string": f"Sat {sat_num:03d}{' (LEAD)' if is_lead else ''}"
+            "interval": f"{interval_start}/{last_time}",
+            "string": current_label_text
         })
+        
+        # Label always visible (controlled by scale in viewer)
         label_show_intervals.append({
             "interval": f"{first_time}/{last_time}",
             "boolean": True
@@ -209,6 +305,8 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
         download_intervals = []
         connected_intervals = []
         in_view_intervals = []
+        distance_intervals = []
+        elevation_intervals = []
         
         # Get all unique timestamps and sort
         all_times = sorted(sat_df['time'].unique())
@@ -236,6 +334,8 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
             download = last_row['downloaded_mb'] if pd.notna(last_row['downloaded_mb']) else 0
             connected = last_row['connected'] == 1
             in_view = last_row['in_view'] == 1
+            distance = last_row['distance_km'] if pd.notna(last_row['distance_km']) else 0
+            elevation = last_row['elevation_deg'] if pd.notna(last_row['elevation_deg']) else 0
             
             buffer_intervals.append({
                 "interval": f"{time_str}/{next_time}",
@@ -253,6 +353,14 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
                 "interval": f"{time_str}/{next_time}",
                 "boolean": in_view
             })
+            distance_intervals.append({
+                "interval": f"{time_str}/{next_time}",
+                "number": float(distance)
+            })
+            elevation_intervals.append({
+                "interval": f"{time_str}/{next_time}",
+                "number": float(elevation)
+            })
         
         # Add satellite packet
         czml.append({
@@ -262,28 +370,30 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
                 "buffer_mb": buffer_intervals,
                 "download_mb": download_intervals,
                 "is_connected": connected_intervals,
-                "in_view": in_view_intervals
+                "in_view": in_view_intervals,
+                "distance_km": distance_intervals,
+                "elevation_deg": elevation_intervals
             },
             "position": {
                 "epoch": f"{start_time.isoformat()}Z",
                 "cartographicDegrees": positions
             },
             "point": {
-                "pixelSize": 8,
+                "pixelSize": pixelsize_intervals,
                 "color": color_intervals,
-                "outlineColor": {"rgba": lead_palette[cluster_idx % len(lead_palette)]} if is_lead else {"rgba": [0, 0, 0, 0]},
-                "outlineWidth": 3 if is_lead else 0
+                "outlineColor": {"rgba": [0, 0, 0, 0]},
+                "outlineWidth": 0
             },
             "label": {
                 "show": label_show_intervals,
                 "text": label_text_intervals,
                 "font": "14px sans-serif",
                 "fillColor": {"rgba": [255, 255, 255, 255]},  # White text
-                "backgroundColor": {"rgba": lead_palette[cluster_idx % len(lead_palette)]} if is_lead else {"rgba": [0, 128, 0, 200]},
+                "backgroundColor": label_bg_intervals,
                 "showBackground": True,
                 "backgroundPadding": {"cartesian2": [8, 4]},
                 "style": "FILL",
-                "pixelOffset": {"cartesian2": [20, -10]}
+                "pixelOffset": {"cartesian2": [50, -30]}
             },
             "polyline": {
                 "show": polyline_show_intervals,
@@ -307,7 +417,10 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
     script_dir = Path(__file__).resolve().parent
     output_dir = script_dir / "cesium_output"
     output_dir.mkdir(exist_ok=True)
-    output_file = output_dir / f"{spacing}_{policy}_{size}sats_{image_size}mb.czml"
+    
+    # Format image size as 5-digit number to match analysis convention
+    image_size_padded = image_size.zfill(5)  # e.g., "028" -> "00028", "28000" -> "28000"
+    output_file = output_dir / f"{spacing}_{policy}_{size}sats_{image_size_padded}.czml"
     
     with open(output_file, 'w') as f:
         json.dump(czml, f)

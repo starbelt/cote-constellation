@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Constellation Visualization</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.133/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.133/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <style>
+        html, body, #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        
+        #controlPanel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(26, 26, 26, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            z-index: 1000;
+            min-width: 280px;
+        }
+        
+        #dataPanel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(26, 26, 26, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            font-family: 'Courier New', monospace;
+            z-index: 1000;
+            min-width: 200px;
+            max-width: 250px;
+            border: 1px solid #00ff00;
+        }
+        
+        #dataPanel h3 {
+            margin: 0 0 10px 0;
+            font-size: 13px;
+            color: #00ff00;
+            text-align: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .queue-container {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        
+        .queue-item {
+            background: rgba(0, 100, 0, 0.3);
+            border: 1px solid #00ff00;
+            padding: 8px;
+            font-size: 11px;
+            display: flex;
+            justify-content: space-between;
+            transition: all 0.3s;
+        }
+        
+        .queue-item.connected {
+            background: rgba(0, 255, 0, 0.2);
+            border-color: #00ff00;
+            border-width: 2px;
+        }
+        
+        .queue-item .sat-id {
+            color: #fff;
+            font-weight: bold;
+        }
+        
+        .queue-item .buffer {
+            color: #00ff00;
+        }
+        
+        .queue-empty {
+            text-align: center;
+            color: #666;
+            font-size: 11px;
+            padding: 20px;
+        }
+        
+        #satInfoPanel {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(26, 26, 26, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            font-family: 'Courier New', monospace;
+            z-index: 1000;
+            min-width: 250px;
+            border: 1px solid #00aaff;
+            display: none;
+        }
+        
+        #satInfoPanel h3 {
+            margin: 0 0 10px 0;
+            font-size: 13px;
+            color: #00aaff;
+            text-align: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        #satInfoPanel .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-size: 11px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        #satInfoPanel .info-label {
+            color: #aaa;
+        }
+        
+        #satInfoPanel .info-value {
+            color: #00aaff;
+            font-weight: bold;
+        }
+        
+        #satInfoPanel .close-btn {
+            position: absolute;
+            top: 5px;
+            right: 8px;
+            background: none;
+            border: none;
+            color: #ff6666;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            line-height: 18px;
+        }
+        
+        #satInfoPanel .close-btn:hover {
+            color: #ff0000;
+        }
+        
+        #controlPanel h3 {
+            margin: 0 0 15px 0;
+            font-size: 15px;
+            border-bottom: 2px solid #00ff00;
+            padding-bottom: 8px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: bold;
+            color: #00ff00;
+        }
+        
+        .button-row {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        
+        .toggle-btn {
+            flex: 1;
+            min-width: 60px;
+            padding: 8px 12px;
+            border: 1px solid #444;
+            background: rgba(50, 50, 50, 0.8);
+            color: #aaa;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        
+        .toggle-btn:hover {
+            background: rgba(70, 70, 70, 0.9);
+            border-color: #666;
+        }
+        
+        .toggle-btn.active {
+            background: #00ff00;
+            color: #000;
+            border-color: #00ff00;
+            font-weight: bold;
+        }
+        
+        .toggle-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        
+        #infoDisplay {
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(0, 128, 0, 0.2);
+            border-radius: 4px;
+            border: 1px solid #00ff00;
+            font-size: 11px;
+        }
+        
+        #infoDisplay div {
+            margin: 4px 0;
+        }
+        
+        .label-text {
+            color: #aaa;
+        }
+        
+        .value-text {
+            color: white;
+            font-weight: bold;
+        }
+        
+        #loadingIndicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px 40px;
+            border-radius: 8px;
+            color: #00ff00;
+            font-size: 16px;
+            display: none;
+            z-index: 2000;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    <div id="loadingIndicator">Loading...</div>
+    
+    <div id="dataPanel">
+        <h3 id="queueTitle">QUEUE</h3>
+        <div id="queueContainer" class="queue-container">
+            <div class="queue-empty">No satellites in view</div>
+        </div>
+    </div>
+    
+    <div id="satInfoPanel">
+        <button class="close-btn" onclick="closeSatInfo()">×</button>
+        <h3 id="satInfoTitle">SATELLITE INFO</h3>
+        <div id="satInfoContent"></div>
+    </div>
+    
+    <div id="controlPanel">
+        <h3>🛰️ Constellation Viewer</h3>
+        
+        <div class="control-group">
+            <label>Spacing Strategy:</label>
+            <div class="button-row">
+                <button class="toggle-btn" data-group="spacing" data-value="orbit-spaced">Orbit</button>
+                <button class="toggle-btn active" data-group="spacing" data-value="close-orbit-spaced">Close-Orbit</button>
+                <button class="toggle-btn" data-group="spacing" data-value="close-spaced">Close</button>
+                <button class="toggle-btn" data-group="spacing" data-value="frame-spaced">Frame</button>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>Link Policy:</label>
+            <div class="button-row">
+                <button class="toggle-btn active" data-group="policy" data-value="sticky">Sticky</button>
+                <button class="toggle-btn" data-group="policy" data-value="fifo">FIFO</button>
+                <button class="toggle-btn" data-group="policy" data-value="random">Random</button>
+                <button class="toggle-btn" data-group="policy" data-value="roundrobin">RoundRobin</button>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>Image Size:</label>
+            <div class="button-row">
+                <button class="toggle-btn" data-group="imagesize" data-value="0">0.03 MB</button>
+                <button class="toggle-btn" data-group="imagesize" data-value="1">0.3 MB</button>
+                <button class="toggle-btn" data-group="imagesize" data-value="2">3 MB</button>
+                <button class="toggle-btn active" data-group="imagesize" data-value="3">30 MB</button>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>Constellation Size:</label>
+            <div class="button-row">
+                <button class="toggle-btn" data-group="size" data-value="01">1</button>
+                <button class="toggle-btn" data-group="size" data-value="50">50</button>
+                <button class="toggle-btn" data-group="size" data-value="100">100</button>
+                <button class="toggle-btn active" data-group="size" data-value="200">200</button>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>Display Options:</label>
+            <div class="button-row">
+                <label style="color: white; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="toggleLabels" onchange="toggleSatelliteLabels()" style="width: 18px; height: 18px; cursor: pointer;">
+                    <span>Show Labels</span>
+                </label>
+            </div>
+            <div class="button-row" style="margin-top: 8px;">
+                <label style="color: white; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="toggleConnInfo" checked onchange="toggleConnectionInfo()" style="width: 18px; height: 18px; cursor: pointer;">
+                    <span>Show Connected Sat Info</span>
+                </label>
+            </div>
+        </div>
+        
+        <div id="infoDisplay">
+            <div><span class="label-text">Config:</span> <span class="value-text" id="currentConfig">-</span></div>
+            <div><span class="label-text">Ground Station:</span> <span class="value-text">Svalbard</span></div>
+            <div><span class="label-text">Status:</span> <span class="value-text" id="status">Ready</span></div>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize Cesium viewer (following CASMA demo approach)
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            shouldAnimate: false,  // Manual start (user controls playback)
+            baseLayerPicker: false,
+            geocoder: false,
+            homeButton: false,
+            sceneModePicker: false,
+            navigationHelpButton: false,
+            animation: true,
+            timeline: true,
+            fullscreenButton: false
+        });
+        
+        // Set clock to 1x real-time speed (not 60x)
+        viewer.clock.multiplier = 1;
+        
+        // Note: CZML filenames are now dynamically constructed based on selections
+        // Format: {spacing}_{policy}_{size}sats_{imagesize}.czml
+        // Where imagesize is one of: 00027, 00279, 02799, 28000
+
+        // Track hovered entity for label display
+        let hoveredEntity = null;
+        let selectedEntity = null;
+        const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+        
+        // Hover handler
+        handler.setInputAction(function(movement) {
+            const pickedObject = viewer.scene.pick(movement.endPosition);
+            
+            // Clear previous hover
+            if (hoveredEntity && hoveredEntity.id.startsWith('sat_')) {
+                const checkbox = document.getElementById('toggleLabels');
+                // Only hide if checkbox is unchecked and not selected
+                if (!checkbox.checked && hoveredEntity.label && hoveredEntity !== selectedEntity) {
+                    hoveredEntity.label.scale = 0.0;
+                }
+                hoveredEntity = null;
+            }
+            
+            // Show label on new hover
+            if (Cesium.defined(pickedObject) && Cesium.defined(pickedObject.id)) {
+                const entity = pickedObject.id;
+                if (entity.id.startsWith('sat_') && entity.label) {
+                    hoveredEntity = entity;
+                    entity.label.scale = 1.0;
+                }
+            }
+        }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+        
+        // Click handler to show satellite info
+        handler.setInputAction(function(click) {
+            const pickedObject = viewer.scene.pick(click.position);
+            
+            if (Cesium.defined(pickedObject) && Cesium.defined(pickedObject.id)) {
+                const entity = pickedObject.id;
+                if (entity.id.startsWith('sat_')) {
+                    selectedEntity = entity;
+                    showSatelliteInfo(entity);
+                }
+            } else {
+                // Clicked empty space - close info panel
+                closeSatInfo();
+            }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        
+        // Function to show satellite info panel
+        function showSatelliteInfo(entity) {
+            const panel = document.getElementById('satInfoPanel');
+            const content = document.getElementById('satInfoContent');
+            const title = document.getElementById('satInfoTitle');
+            
+            // Get current properties
+            const currentTime = viewer.clock.currentTime;
+            const buffer = entity.properties.buffer_mb ? entity.properties.buffer_mb.getValue(currentTime) : 0;
+            const downloaded = entity.properties.download_mb ? entity.properties.download_mb.getValue(currentTime) : 0;
+            const isConnected = entity.properties.is_connected ? entity.properties.is_connected.getValue(currentTime) : false;
+            const inView = entity.properties.in_view ? entity.properties.in_view.getValue(currentTime) : false;
+            
+            // Get position for lat/lon/alt
+            const position = entity.position.getValue(currentTime);
+            const cartographic = Cesium.Cartographic.fromCartesian(position);
+            const lat = Cesium.Math.toDegrees(cartographic.latitude).toFixed(3);
+            const lon = Cesium.Math.toDegrees(cartographic.longitude).toFixed(3);
+            const alt = (cartographic.height / 1000).toFixed(1); // Convert to km
+            
+            title.textContent = entity.name.toUpperCase();
+            
+            content.innerHTML = `
+                <div class="info-row">
+                    <span class="info-label">Status:</span>
+                    <span class="info-value" style="color: ${isConnected ? '#00ff00' : inView ? '#ffaa00' : '#888'}">${isConnected ? 'CONNECTED' : inView ? 'IN VIEW' : 'OUT OF VIEW'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Latitude:</span>
+                    <span class="info-value">${lat}°</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Longitude:</span>
+                    <span class="info-value">${lon}°</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Altitude:</span>
+                    <span class="info-value">${alt} km</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Buffer:</span>
+                    <span class="info-value">${buffer.toFixed(2)} MB</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Downloaded:</span>
+                    <span class="info-value">${downloaded.toFixed(2)} MB</span>
+                </div>
+            `;
+            
+            panel.style.display = 'block';
+            
+            // Keep label visible for selected satellite
+            if (entity.label) {
+                entity.label.scale = 1.0;
+            }
+        }
+        
+        // Function to close satellite info panel
+        function closeSatInfo() {
+            const panel = document.getElementById('satInfoPanel');
+            panel.style.display = 'none';
+            
+            // Hide label if checkbox is unchecked
+            if (selectedEntity && selectedEntity.label) {
+                const checkbox = document.getElementById('toggleLabels');
+                if (!checkbox.checked) {
+                    selectedEntity.label.scale = 0.0;
+                }
+            }
+            selectedEntity = null;
+        }
+        
+        let currentDataSource = null;
+        let queueListenerSetup = false; // Track if listener is already set up
+        let debugCount = 0;
+        
+        // Current selection state
+        let currentSelection = {
+            spacing: 'close-orbit-spaced',
+            policy: 'sticky',
+            imagesizeIndex: 3,  // Start with 30MB (index 3)
+            size: '200'
+        };
+        
+        // Load CZML function
+        async function loadCZML() {
+            // Map imagesize index to zero-padded image size codes
+            const imageSizeCodes = ['00027', '00279', '02799', '28000'];
+            const imageSizeCode = imageSizeCodes[currentSelection.imagesizeIndex];
+            
+            // Dynamically construct filename: {spacing}_{policy}_{size}sats_{imagesize}.czml
+            const filename = `${currentSelection.spacing}_${currentSelection.policy}_${currentSelection.size}sats_${imageSizeCode}.czml`;
+            
+            console.log('Loading CZML:', filename);
+            
+            document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('status').textContent = 'Loading...';
+            document.getElementById('status').style.color = '#ffaa00';
+            
+            try {
+                // Remove existing data source
+                if (currentDataSource) {
+                    viewer.dataSources.remove(currentDataSource);
+                    // Reset listener flag when switching files
+                    queueListenerSetup = false;
+                }
+                
+                // Load new CZML
+                currentDataSource = await Cesium.CzmlDataSource.load(filename);
+                await viewer.dataSources.add(currentDataSource);
+                
+                // Update queue title based on policy
+                const queueTitle = document.getElementById('queueTitle');
+                queueTitle.textContent = `${currentSelection.policy.toUpperCase()} QUEUE`;
+                
+                // Set clock to CZML data timespan (2025-01-01)
+                const start = Cesium.JulianDate.fromIso8601('2025-01-01T00:00:00Z');
+                const stop = Cesium.JulianDate.fromIso8601('2025-01-01T00:20:00Z');
+                viewer.clock.startTime = start.clone();
+                viewer.clock.stopTime = stop.clone();
+                viewer.clock.currentTime = start.clone();
+                viewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
+                viewer.clock.multiplier = 1;
+                
+                // Fly to view showing constellation and ground station (zoomed out view)
+                viewer.camera.flyTo({
+                    destination: Cesium.Cartesian3.fromDegrees(15.3906, 65.0, 12000000),
+                    duration: 2.0
+                });
+                
+                // Update info display
+                const spacingLabel = currentSelection.spacing.replace(/-/g, ' ');
+                document.getElementById('currentConfig').textContent = 
+                    `${spacingLabel} | ${currentSelection.policy} | ${currentSelection.size} sats`;
+                document.getElementById('status').textContent = 'Active';
+                document.getElementById('status').style.color = '#00ff00';
+                
+                // Set up queue listener (only once)
+                if (!queueListenerSetup) {
+                    queueListenerSetup = true;
+                    
+                    let lastUpdateTime = 0;
+                    const UPDATE_INTERVAL_MS = 1000; // Update queue every 1 second, not every tick
+                    
+                    viewer.clock.onTick.addEventListener(function(clock) {
+                        if (!currentDataSource) return;
+                        
+                        // Throttle updates to once per second to prevent flickering
+                        const now = Date.now();
+                        if (now - lastUpdateTime < UPDATE_INTERVAL_MS) {
+                            return;
+                        }
+                        lastUpdateTime = now;
+                        
+                        const entities = currentDataSource.entities.values;
+                        const queueContainer = document.getElementById('queueContainer');
+                        
+                        // Build queue: satellites in view, sorted by ID
+                        const queue = [];
+                        
+                        // Debug first few ticks
+                        if (debugCount < 5) {
+                            console.log('=== QUEUE DEBUG ===');
+                            console.log('Clock time:', clock.currentTime.toString());
+                            console.log('DataSource entities:', entities.length);
+                            debugCount++;
+                        }
+                        
+                        // Build queue: only show satellites that are IN VIEW
+                        let inViewCount = 0;
+                        let withBufferCount = 0;
+                        let addedToQueueCount = 0;
+                        
+                        const showConnInfo = document.getElementById('toggleConnInfo').checked;
+                        const showLabels = document.getElementById('toggleLabels').checked;
+                        
+                        for (let i = 0; i < entities.length; i++) {
+                            const entity = entities[i];
+                            if (entity.id.startsWith('sat_') && entity.properties) {
+                                try {
+                                    const inView = entity.properties.in_view;
+                                    const isConnected = entity.properties.is_connected;
+                                    const buffer = entity.properties.buffer_mb;
+                                    
+                                    // Update label visibility
+                                    if (entity.label) {
+                                        const connectedValue = isConnected ? isConnected.getValue(clock.currentTime) : false;
+                                        
+                                        // Show if: labels checkbox ON, OR (connected AND show conn info ON), OR hovered, OR selected
+                                        if (showLabels || (showConnInfo && connectedValue) || entity === hoveredEntity || entity === selectedEntity) {
+                                            entity.label.scale = 1.0;
+                                        } else {
+                                            entity.label.scale = 0.0;
+                                        }
+                                    }
+                                    
+                                    if (inView && buffer) {
+                                        // Use current time directly - CZML intervals now overlap to prevent gaps
+                                        const inViewValue = inView.getValue(clock.currentTime);
+                                        const bufferValue = buffer.getValue(clock.currentTime);
+                                        const connectedValue = isConnected ? isConnected.getValue(clock.currentTime) : false;
+                                        
+                                        // Track stats for debugging
+                                        if (inViewValue === true) inViewCount++;
+                                        if (bufferValue !== undefined && bufferValue !== null) withBufferCount++;
+                                        
+                                        // Show satellites that are in view (regardless of buffer amount)
+                                        // This shows the full picture of what's visible from ground station
+                                        if (inViewValue === true && bufferValue !== undefined && bufferValue !== null) {
+                                            const satNum = entity.name.split(' ')[1];
+                                            
+                                            queue.push({
+                                                id: satNum,
+                                                buffer: bufferValue,
+                                                connected: connectedValue
+                                            });
+                                            addedToQueueCount++;
+                                            
+                                            if (debugCount < 5 && queue.length <= 3) {
+                                                console.log(`  -> Sat ${satNum}: buf=${bufferValue.toFixed(3)}MB, conn=${connectedValue}`);
+                                            }
+                                        }
+                                    }
+                                } catch (e) {
+                                    if (debugCount < 20) {
+                                        console.error('Error reading properties:', e.message, entity.id);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Debug when queue is empty but satellites should be visible
+                        if (queue.length === 0 && debugCount < 30) {
+                            console.log(`⚠️ EMPTY QUEUE: inView=${inViewCount}, withBuffer=${withBufferCount}, added=${addedToQueueCount}, entities=${entities.length}`);
+                        }
+                        
+                        // Sort by ID
+                        queue.sort((a, b) => a.id.localeCompare(b.id));
+                        
+                        if (debugCount < 15) {
+                            console.log('Queue length:', queue.length);
+                        }
+                        
+                        // Update display (only when there's an actual change)
+                        if (queue.length === 0) {
+                            queueContainer.innerHTML = '<div class="queue-empty">No satellites in view</div>';
+                        } else {
+                            let html = '';
+                            queue.forEach((sat, index) => {
+                                // Grey for waiting, green for connected
+                                const bgColor = sat.connected ? 'rgba(0, 255, 0, 0.2)' : 'rgba(128, 128, 128, 0.2)';
+                                const borderColor = sat.connected ? '#00ff00' : '#888';
+                                const borderWidth = sat.connected ? '2px' : '1px';
+                                
+                                html += `<div class="queue-item" style="background: ${bgColor}; border: ${borderWidth} solid ${borderColor};">`;
+                                html += `<span class="sat-id">Sat ${sat.id}</span>`;
+                                html += `<span class="buffer">${sat.buffer.toFixed(1)} MB</span>`;
+                                html += '</div>';
+                            });
+                            queueContainer.innerHTML = html;
+                        }
+                    });
+                }
+                
+            } catch (error) {
+                console.error('Error loading CZML:', error);
+                document.getElementById('status').textContent = 'Error';
+                document.getElementById('status').style.color = '#ff0000';
+            } finally {
+                document.getElementById('loadingIndicator').style.display = 'none';
+            }
+        }
+        
+        // Toggle satellite labels visibility
+        function toggleSatelliteLabels() {
+            const checkbox = document.getElementById('toggleLabels');
+            const labelsVisible = checkbox.checked;
+            
+            // Update all satellite entities
+            if (currentDataSource) {
+                const entities = currentDataSource.entities.values;
+                for (let i = 0; i < entities.length; i++) {
+                    const entity = entities[i];
+                    if (entity.id.startsWith('sat_') && entity.label) {
+                        // If labels are visible, show all; if hidden, hide all (unless currently hovered or selected)
+                        if (labelsVisible) {
+                            entity.label.scale = 1.0;
+                        } else {
+                            // Only hide if not currently hovered or selected
+                            if (entity !== hoveredEntity && entity !== selectedEntity) {
+                                entity.label.scale = 0.0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Toggle connection info display (elevation and distance)
+        function toggleConnectionInfo() {
+            // The queue display will automatically update on next tick
+            // No need to force update here, it will refresh within 1 second
+        }
+        
+        // Toggle button functionality
+        document.querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                if (this.disabled) return;
+                
+                const group = this.dataset.group;
+                const value = this.dataset.value;
+                
+                // Remove active from all buttons in this group
+                document.querySelectorAll(`[data-group="${group}"]`).forEach(b => {
+                    b.classList.remove('active');
+                });
+                
+                // Set this button as active
+                this.classList.add('active');
+                
+                // Update current selection
+                if (group === 'imagesize') {
+                    // Convert imagesize button value to index (0-3)
+                    currentSelection.imagesizeIndex = parseInt(value);
+                } else {
+                    currentSelection[group] = value;
+                }
+                
+                // Load new visualization
+                loadCZML();
+            });
+        });
+        
+        // Initial active buttons are already set in HTML
+        // Load initial visualization (onTick listener will be set up after CZML loads)
+        loadCZML();
+    </script>
+</body>
+</html>
