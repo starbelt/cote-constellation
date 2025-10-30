@@ -10,8 +10,8 @@ from pathlib import Path
 def plot_distribution_table():
     """Create bar chart visualization of the distribution table"""
     
-    zip_100 = 'constellation_analysis_20251017_011957_28000_100/orbit-spaced/simulation_logs.zip'
-    zip_200 = 'constellation_analysis_20251017_054957_28000_200/orbit-spaced/simulation_logs.zip'
+    zip_100 = 'constellation_analysis_20251022_214230_28000_100/orbit-spaced/simulation_logs.zip'
+    zip_200 = 'constellation_analysis_20251022_220920_28000_200/orbit-spaced/simulation_logs.zip'
     
     print("Loading data...")
     with zipfile.ZipFile(zip_100, 'r') as zipf:

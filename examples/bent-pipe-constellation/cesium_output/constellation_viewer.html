@@ -480,10 +480,10 @@
             const imageSizeCodes = ['00027', '00279', '02799', '28000'];
             const imageSizeCode = imageSizeCodes[currentSelection.imagesizeIndex];
             
-            // Dynamically construct filename: {spacing}_{policy}_{size}sats_{imagesize}.czml
-            const filename = `${currentSelection.spacing}_${currentSelection.policy}_${currentSelection.size}sats_${imageSizeCode}.czml`;
+            // Dynamically construct filename: {spacing}_{policy}_{size}sats_{imagesize}.czml.gz
+            const filename = `${currentSelection.spacing}_${currentSelection.policy}_${currentSelection.size}sats_${imageSizeCode}.czml.gz`;
             
-            console.log('Loading CZML:', filename);
+            console.log('Loading compressed CZML:', filename);
             
             document.getElementById('loadingIndicator').style.display = 'block';
             document.getElementById('status').textContent = 'Loading...';
@@ -497,8 +497,23 @@
                     queueListenerSetup = false;
                 }
                 
-                // Load new CZML
-                currentDataSource = await Cesium.CzmlDataSource.load(filename);
+                // Fetch and decompress the .czml.gz file
+                const response = await fetch(filename);
+                if (!response.ok) {
+                    throw new Error(`Failed to load ${filename}: ${response.statusText}`);
+                }
+                
+                // Get the compressed data as a blob
+                const blob = await response.blob();
+                
+                // Use native browser decompression stream
+                const decompressedStream = blob.stream().pipeThrough(new DecompressionStream('gzip'));
+                const decompressedBlob = await new Response(decompressedStream).blob();
+                const czmlText = await decompressedBlob.text();
+                const czmlData = JSON.parse(czmlText);
+                
+                // Load the decompressed CZML data
+                currentDataSource = await Cesium.CzmlDataSource.load(czmlData);
                 await viewer.dataSources.add(currentDataSource);
                 
                 // Update queue title based on policy

@@ -7,6 +7,9 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 import sys
+import zipfile
+import shutil
+import gzip
 
 def generate_single_czml(size, analysis_dir, spacing, policy):
     """Generate CZML for a single configuration"""
@@ -21,17 +24,36 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
     print(f"Analysis dir: {analysis_dir}")
     print(f"{'='*80}\n")
     
-    # Load visibility log
-    vis_log_path = Path(analysis_dir) / spacing / policy / "visibility_log.csv"
+    # Check if we need to unzip simulation_logs.zip
+    spacing_dir = Path(analysis_dir) / spacing
+    zip_file = spacing_dir / "simulation_logs.zip"
+    policy_dir = spacing_dir / policy
+    vis_log_path = policy_dir / "visibility_log.csv"
+    extracted = False
     
+    # If visibility_log doesn't exist but zip does, extract ONLY the needed policy
+    if not vis_log_path.exists() and zip_file.exists():
+        print(f"📦 Extracting {policy}/ from {zip_file.name}...")
+        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+            # Extract only files from the specific policy directory
+            policy_members = [m for m in zip_ref.namelist() if m.startswith(f"{policy}/")]
+            if policy_members:
+                zip_ref.extractall(spacing_dir, members=policy_members)
+                extracted = True
+                print(f"✅ Extracted {len(policy_members)} files to {spacing_dir}/{policy}")
+            else:
+                print(f"❌ Policy '{policy}' not found in zip")
+                return None
+    
+    # Load visibility log
     if not vis_log_path.exists():
         print(f"❌ File not found: {vis_log_path}")
         return None
     
     df = pd.read_csv(vis_log_path)
     
-    # Limit to 2 minutes (120 seconds) for smaller CZML files
-    df = df[df['time'] <= 120].copy()
+    # Limit to 1 hour (3600 seconds) for visualization
+    df = df[df['time'] <= 3600].copy()
     
     print(f"  Data points: {len(df)} rows")
     print(f"  Time range: {df['time'].min()} - {df['time'].max()} seconds")
@@ -271,34 +293,6 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
             "boolean": True
         })
         
-        # Build connection line show intervals (MUST have explicit false intervals)
-        # Start by checking if satellite is connected at first timestamp
-        polyline_show_intervals = []
-        first_time = (start_time + timedelta(seconds=float(sat_df.iloc[0]['time']))).isoformat() + "Z"
-        first_connected = bool(sat_df.iloc[0]['connected'] == 1)
-        
-        current_connected = first_connected
-        interval_start = first_time
-        
-        for _, row in sat_df.iterrows():
-            time_str = (start_time + timedelta(seconds=float(row['time']))).isoformat() + "Z"
-            is_connected = bool(row['connected'] == 1)
-            
-            if is_connected != current_connected:
-                # Close previous interval
-                polyline_show_intervals.append({
-                    "interval": f"{interval_start}/{time_str}",
-                    "boolean": current_connected
-                })
-                interval_start = time_str
-                current_connected = is_connected
-        
-        # Close final interval
-        polyline_show_intervals.append({
-            "interval": f"{interval_start}/{last_time}",
-            "boolean": current_connected
-        })
-        
         # Build custom properties for buffer and download data
         # Create continuous 1-second intervals (no gaps) by forward-filling
         buffer_intervals = []
@@ -360,6 +354,15 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
             elevation_intervals.append({
                 "interval": f"{time_str}/{next_time}",
                 "number": float(elevation)
+            })
+        
+        # Build polyline show intervals using the same 1-second granularity as connected_intervals
+        # This ensures the green connection line matches exactly with the connection state
+        polyline_show_intervals = []
+        for conn_interval in connected_intervals:
+            polyline_show_intervals.append({
+                "interval": conn_interval["interval"],
+                "boolean": conn_interval["boolean"]
             })
         
         # Add satellite packet
@@ -429,7 +432,26 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
     print(f"\n✅ Generated: {output_file.name}")
     print(f"   File size: {file_size:.2f} MB")
     
-    return str(output_file)
+    # Compress the CZML file
+    print(f"🗜️  Compressing to .gz...")
+    output_gz = output_file.with_suffix('.czml.gz')
+    with open(output_file, 'rb') as f_in:
+        with gzip.open(output_gz, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    
+    # Remove uncompressed file
+    output_file.unlink()
+    
+    compressed_size = output_gz.stat().st_size / (1024 * 1024)
+    print(f"   Compressed: {compressed_size:.2f} MB ({compressed_size/file_size*100:.1f}% of original)")
+    
+    # Cleanup: remove extracted directory if we extracted it
+    if extracted and policy_dir.exists():
+        print(f"🧹 Cleaning up {policy_dir}...")
+        shutil.rmtree(policy_dir)
+        print(f"✅ Cleanup complete")
+    
+    return str(output_gz)
 
 
 if __name__ == "__main__":
