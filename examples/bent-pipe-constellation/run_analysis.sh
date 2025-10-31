@@ -19,9 +19,9 @@
 #
 # Valid values (use comma-separated for multiple):
 #   policies:    sticky, fifo, roundrobin, random (or "" for all)
-#   sat_counts:  1, 50, 100, 200 (or "" for all)
+#   sat_counts:  1, 10, 15, 17, 18, 19, 20, 25, 50, 100, 200 (or "" for all)
 #   spacings:    close-spaced, orbit-spaced, frame-spaced, close-orbit-spaced (or "" for all)
-#   image_sizes: 028, 280, 2800, 28000 (or "" for all)
+#   image_sizes: 028, 280, 2800, 28000, 280000 (or "" for all)
 
 set -e  # Exit on any error
 
@@ -35,9 +35,9 @@ PARAM_IMAGE_SIZE=${4:-""}
 
 # Define all possible values
 ALL_POLICIES=("sticky" "fifo" "roundrobin" "random")
-ALL_SAT_COUNTS=(1 50 100 200)
+ALL_SAT_COUNTS=(1 10 15 17 18 19 20 25 50 100 200)
 ALL_SPACING_STRATEGIES=("close-spaced" "close-orbit-spaced" "frame-spaced" "orbit-spaced")
-ALL_IMAGE_SIZES=(028 280 2800 28000)
+ALL_IMAGE_SIZES=(028 280 2800 28000 280000 1024000)
 
 # Function to parse comma-separated list into array
 parse_list() {
@@ -86,13 +86,13 @@ if parse_list "$PARAM_SAT_COUNT" "SAT_COUNT_LIST"; then
     SAT_COUNTS=()
     for count in "${SAT_COUNT_LIST[@]}"; do
         case "$count" in
-            1|50|100|200)
+            1|10|15|17|18|19|20|25|50|100|200)
                 SAT_COUNTS+=("$count")
                 ;;
             *)
                 echo "❌ Error: Invalid satellite count '$count'"
-                echo "   Valid options: 1, 50, 100, 200"
-                echo "   Use comma-separated list: 50,100"
+                echo "   Valid options: 1, 10, 15, 17, 18, 19, 20, 25, 50, 100, 200"
+                echo "   Use comma-separated list: 10,15,17,18,19,20,25,50,100"
                 exit 1
                 ;;
         esac
@@ -126,13 +126,13 @@ if parse_list "$PARAM_IMAGE_SIZE" "IMAGE_SIZE_LIST"; then
     IMAGE_SIZES=()
     for size in "${IMAGE_SIZE_LIST[@]}"; do
         case "$size" in
-            028|280|2800|28000)
+            028|280|2800|28000|280000|1024000)
                 IMAGE_SIZES+=("$size")
                 ;;
             *)
                 echo "❌ Error: Invalid image size '$size'"
-                echo "   Valid options: 028, 280, 2800, 28000"
-                echo "   Use comma-separated list: 028,28000"
+                echo "   Valid options: 028, 280, 2800, 28000, 280000, 1024000"
+                echo "   Use comma-separated list: 028,28000,280000,1024000"
                 exit 1
                 ;;
         esac
