@@ -57,3 +57,5 @@ capture_and_downlink
 
 CASMA-Cesium-Demo/
 *.czml.gz
+examples/bent-pipe-constellation/results
+*.log

@@ -11,37 +11,41 @@ public:
     CloseOrbitSpacedStrategy() = default;
     ~CloseOrbitSpacedStrategy() = default;
 
-    // Strategy: Constant 50 orbital positions with variable cluster density
-    // constellation.dat provides base spacing for 50 orbital positions (108 seconds)
+    // Strategy: Constant 25 orbital positions with variable cluster density
+    // constellation.dat provides base spacing for 25 orbital positions
     // initialize() propagates additional satellites at each position:
-    // - 1 sat:    No clustering (copy of orbit_01.dat)
-    // - 50 sats:  50 positions × 1 sat  (identical to orbit-spaced, no re-phasing)
-    // - 100 sats: 50 positions × 2 sats (propagate 1 extra at 6km = 12km/2)
-    // - 200 sats: 50 positions × 4 sats (propagate 3 extras at 3km = 12km/4)
+    // - 25 sats:  25 positions × 1 sat  (identical to orbit-spaced, no re-phasing)
+    // - 50 sats:  25 positions × 2 sats (propagate 1 extra at 6km)
+    // - 100 sats: 25 positions × 4 sats (propagate 3 extras at 3km)
+    // - 200 sats: 25 positions × 8 sats (propagate 7 extras at 1.5km)
 
     void initialize(std::vector<cote::Satellite>& satellites) {
         const size_t satCount = satellites.size();
         std::cout << "close-orbit-spaced: " << satCount << " satellites" << std::endl;
         
-        // 50 sats: No clustering (baseline complete)
-        if (satCount == 50) {
-            std::cout << "  → 50 sats: baseline (no clustering)" << std::endl;
+        // 25 sats: No clustering (baseline complete)
+        if (satCount == 25) {
+            std::cout << "  → 25 sats: baseline (no clustering)" << std::endl;
             return;
         }
         
         // Cluster all satellites
-        // 100 sats: 50 clusters of 2 (base sats: 000, 002, 004, 006, ...)
-        // 200 sats: 50 clusters of 4 (base sats: 000, 004, 008, 012, ...)
+        // 50 sats:  25 clusters of 2 (base sats: 000, 002, 004, 006, ...)
+        // 100 sats: 25 clusters of 4 (base sats: 000, 004, 008, 012, ...)
+        // 200 sats: 25 clusters of 8 (base sats: 000, 008, 016, 024, ...)
         const double orbitalVelocity = 7.5;  // km/s (approximate LEO velocity)
         size_t clusterSize;
         double targetSeparationKm;
         
-        if (satCount == 100) {
+        if (satCount == 50) {
             clusterSize = 2;
-            targetSeparationKm = 12.0;  // 12km spacing within cluster
-        } else {  // 200 sats
+            targetSeparationKm = 6.0;   // 6km spacing within cluster
+        } else if (satCount == 100) {
             clusterSize = 4;
-            targetSeparationKm = 4.0;   // 4km spacing within cluster
+            targetSeparationKm = 3.0;   // 3km spacing within cluster
+        } else {  // 200 sats
+            clusterSize = 8;
+            targetSeparationKm = 1.5;   // 1.5km spacing within cluster
         }
         
         const double timeOffsetSec = targetSeparationKm / orbitalVelocity;

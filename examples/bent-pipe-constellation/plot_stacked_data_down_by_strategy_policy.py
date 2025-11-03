@@ -16,7 +16,7 @@ import zipfile
 from pathlib import Path
 import re
 
-def scan_all_configurations(search_dir='.'):
+def scan_all_configurations(search_dir='results/base results 2'):
     """Scan for all constellation_analysis folders"""
     configs = []
     
@@ -62,7 +62,7 @@ def get_data_downloaded(zip_path, policy='fifo'):
         print(f"  ⚠️  Error reading {zip_path}/{policy}: {e}")
         return 0.0
 
-def create_stacked_bar_charts():
+def create_stacked_bar_charts(results_dir='results/base results 2'):
     """Create stacked bar charts - one per image size"""
     
     print("="*110)
@@ -71,8 +71,8 @@ def create_stacked_bar_charts():
     print("="*110)
     print()
     
-    print("Scanning for constellation configurations...")
-    configs_df = scan_all_configurations()
+    print(f"Scanning for constellation configurations in: {results_dir}")
+    configs_df = scan_all_configurations(results_dir)
     
     if len(configs_df) == 0:
         print("❌ No configurations found!")
@@ -106,8 +106,8 @@ def create_stacked_bar_charts():
     
     results_df = pd.DataFrame(results)
     
-    # Save raw data
-    output_dir = Path('comparison_charts')
+    # Save raw data - output to comparison_results within the results directory
+    output_dir = Path(results_dir) / 'comparison_results'
     output_dir.mkdir(exist_ok=True)
     results_df.to_csv(output_dir / 'stacked_data_downloaded.csv', index=False)
     print(f"✅ Saved: {output_dir / 'stacked_data_downloaded.csv'}")
@@ -125,7 +125,7 @@ def create_charts(results_df, output_dir):
     image_sizes = sorted(results_df['image_size_mb'].unique())
     strategies = ['close-spaced', 'orbit-spaced', 'frame-spaced', 'close-orbit-spaced']
     policies = ['sticky', 'fifo', 'roundrobin', 'random']
-    sat_counts = sorted(results_df['num_sats'].unique())
+    sat_counts = sorted(results_df['num_sats'].unique())  # Use whatever exists in data
     
     # Color scheme by policy (4 distinct colors for stacks)
     policy_colors = {
@@ -266,7 +266,7 @@ def create_charts(results_df, output_dir):
     print()
     print("Chart Structure:")
     print("  X-AXIS: 4 strategy groups (Close, Orbit, Frame, Close-Orbit)")
-    print("          Each group has 4 bars (one per constellation size: 1, 50, 100, 200)")
+    print(f"          Each group has {len(sat_counts)} bars (constellation sizes: {', '.join(map(str, sat_counts))})")
     print()
     print("  Y-AXIS: Total data downloaded (GB)")
     print()
@@ -277,16 +277,20 @@ def create_charts(results_df, output_dir):
     print("    🟠 Orange = RANDOM")
     print()
     print(f"  RESULT: {len(image_sizes)} chart(s) (one per image size)")
-    print(f"          16 stacked bars per chart (4 strategies × 4 constellation sizes)")
+    print(f"          {4 * len(sat_counts)} stacked bars per chart (4 strategies × {len(sat_counts)} constellation sizes)")
 
 if __name__ == '__main__':
     import os
+    import sys
     
     # Change to script directory
     script_dir = Path(__file__).parent
     os.chdir(script_dir)
     
-    results_df = create_stacked_bar_charts()
+    # Allow passing results directory as command line argument
+    results_dir = sys.argv[1] if len(sys.argv) > 1 else 'results/base results 2'
+    
+    results_df = create_stacked_bar_charts(results_dir)
     
     if results_df is not None:
         print()

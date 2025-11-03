@@ -35,7 +35,7 @@ PARAM_IMAGE_SIZE=${4:-""}
 
 # Define all possible values
 ALL_POLICIES=("sticky" "fifo" "roundrobin" "random")
-ALL_SAT_COUNTS=(1 10 15 17 18 19 20 25 50 100 200)
+ALL_SAT_COUNTS=(1 10 15 17 18 19 20 21 22 25 50 100 200)
 ALL_SPACING_STRATEGIES=("close-spaced" "close-orbit-spaced" "frame-spaced" "orbit-spaced")
 ALL_IMAGE_SIZES=(028 280 2800 28000 280000 1024000)
 
@@ -86,13 +86,13 @@ if parse_list "$PARAM_SAT_COUNT" "SAT_COUNT_LIST"; then
     SAT_COUNTS=()
     for count in "${SAT_COUNT_LIST[@]}"; do
         case "$count" in
-            1|10|15|17|18|19|20|25|50|100|200)
+            1|10|15|17|18|19|20|21|22|25|50|100|200)
                 SAT_COUNTS+=("$count")
                 ;;
             *)
                 echo "❌ Error: Invalid satellite count '$count'"
-                echo "   Valid options: 1, 10, 15, 17, 18, 19, 20, 25, 50, 100, 200"
-                echo "   Use comma-separated list: 10,15,17,18,19,20,25,50,100"
+                echo "   Valid options: 1, 10, 15, 17, 18, 19, 20, 21, 22, 25, 50, 100, 200"
+                echo "   Use comma-separated list: 10,15,17,18,19,20,21,22,25,50,100"
                 exit 1
                 ;;
         esac
