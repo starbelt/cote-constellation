@@ -19,15 +19,22 @@ import sys
 
 # Configuration
 SCRIPT_DIR = Path(__file__).parent.absolute()
+BASE_DIR = SCRIPT_DIR / "results" / "base results 2"
 SPACING_STRATEGIES = ["close-spaced", "close-orbit-spaced", "frame-spaced", "orbit-spaced"]
 POLICIES = ["sticky", "fifo", "roundrobin", "random"]
 
-# Image size mappings
+# Image size mappings (now in KB)
+IMAGE_SIZES_KB = [27, 279, 2799, 28000, 280000, 1024000]
+CONSTELLATION_SIZES = [1, 25, 50, 100, 200]
+
+# Image size mappings for backward compatibility
 IMAGE_SIZE_MAP = {
-    's': 0.027,   # Small images (corrected from 0.028)
-    'm': 0.279,   # Medium images (corrected from 0.28)
-    'l': 2.799,   # Large images (corrected from 2.8)
-    'xl': 28.0    # Extra large images
+    's': 27,      # Small images (27 KB)
+    'm': 279,     # Medium images (279 KB)
+    'l': 2799,    # Large images (2.7 MB)
+    'xl': 28000,  # Extra large images (28 MB)
+    'xxl': 280000,   # 280 MB
+    'xxxl': 1024000  # 1 GB
 }
 
 def parse_image_sizes(image_str):
@@ -49,7 +56,7 @@ def parse_image_sizes(image_str):
 def parse_satellite_counts(sats_str):
     """Parse comma-separated satellite counts"""
     if not sats_str:
-        return [1, 50, 100, 200]  # Return all if none specified
+        return CONSTELLATION_SIZES  # Return all if none specified
     
     try:
         counts = [int(count.strip()) for count in sats_str.split(',')]
@@ -60,29 +67,22 @@ def parse_satellite_counts(sats_str):
 def find_matching_folders(base_dir, image_sizes=None, satellite_counts=None):
     """Find constellation analysis folders matching the specified parameters"""
     if image_sizes is None:
-        image_sizes = list(IMAGE_SIZE_MAP.values())
+        image_sizes = IMAGE_SIZES_KB
     if satellite_counts is None:
-        satellite_counts = [1, 50, 100, 200]
+        satellite_counts = CONSTELLATION_SIZES
     
     # Convert image sizes to the format used in folder names (5 digits with leading zeros)
     size_patterns = []
     for size in image_sizes:
-        if size < 1:
-            # For small sizes like 0.027, convert to 00027 format
-            size_int = int(size * 1000)
-            size_patterns.append(f"{size_int:05d}")
-        else:
-            # For larger sizes like 28.0, convert to 28000 format
-            size_int = int(size * 1000)
-            size_patterns.append(f"{size_int:05d}")
+        size_patterns.append(f"{size:05d}")
     
-    # Convert satellite counts to match the folder format (no leading zeros for larger numbers)
+    # Convert satellite counts to match the folder format
     sat_patterns = []
     for count in satellite_counts:
-        if count < 10:
-            sat_patterns.append(f"{count:02d}")  # "01", "02", etc.
+        if count < 100:
+            sat_patterns.append(f"{count:02d}")  # "01", "25", "50"
         else:
-            sat_patterns.append(str(count))      # "50", "100", "200"
+            sat_patterns.append(str(count))      # "100", "200"
     
     matching_folders = []
     
@@ -116,7 +116,7 @@ def extract_constellation_data(folder_path=None, image_sizes=None, satellite_cou
         
         # Handle relative paths from current directory
         if not folder.is_absolute():
-            folder = SCRIPT_DIR / folder
+            folder = BASE_DIR / folder
         
         # Validate folder exists and follows naming convention
         if not folder.exists():
@@ -134,12 +134,12 @@ def extract_constellation_data(folder_path=None, image_sizes=None, satellite_cou
         return [folder]  # Return as list for consistency
     else:
         # Find matching folders based on image sizes and satellite counts
-        matching_folders = find_matching_folders(SCRIPT_DIR, image_sizes, satellite_counts)
+        matching_folders = find_matching_folders(BASE_DIR, image_sizes, satellite_counts)
         
         if not matching_folders:
-            size_str = ", ".join([f"{s:.3f}MB" for s in image_sizes]) if image_sizes else "all"
+            size_str = ", ".join([f"{s}KB" for s in image_sizes]) if image_sizes else "all"
             sats_str = ", ".join([str(s) for s in satellite_counts]) if satellite_counts else "all"
-            print(f"❌ No constellation_analysis folders found matching:")
+            print(f"❌ No constellation_analysis folders found in {BASE_DIR}")
             print(f"   Image sizes: {size_str}")
             print(f"   Satellite counts: {sats_str}")
             return None
@@ -264,8 +264,12 @@ def parse_communication_data_optimized(strategy, policy, temp_dir):
     
     return gs_timeline[['hours', 'ground_station_active']], satellite_data
 
-def create_strategy_chart_optimized(strategy, output_dir, archive_base_path=None):
+def create_strategy_chart_optimized(strategy, archive_base_path=None):
     """Create a single strategy chart with 4 policies (optimized)."""
+    
+    # Create output directory at script level
+    output_dir = SCRIPT_DIR / "active_idle_timeseries"
+    output_dir.mkdir(exist_ok=True)
     
     plt.style.use('default')
     sns.set_palette("husl")
@@ -496,7 +500,7 @@ def main():
         
         for strategy in SPACING_STRATEGIES:
             print(f"  Processing {strategy} strategy...")
-            output_file = create_strategy_chart_optimized(strategy, folder, folder)
+            output_file = create_strategy_chart_optimized(strategy, folder)
             if output_file:
                 generated_files.append(output_file)
         print()
