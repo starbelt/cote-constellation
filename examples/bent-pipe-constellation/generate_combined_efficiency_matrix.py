@@ -410,12 +410,17 @@ def generate_combined_efficiency_matrix(base_folder, satellite_count=None):
     
     plt.tight_layout()
     
-    # Save the plot with satellite count in filename
+    # Save the plot with satellite count in filename to constellation_analysis/efficiency_matrix/
     if satellite_count is not None:
         output_filename = f'combined_efficiency_matrix_{satellite_count}sats.png'
     else:
         output_filename = 'combined_efficiency_matrix.png'
-    output_path = base_path.parent / output_filename
+    
+    # Save to constellation_analysis/efficiency_matrix/ directory
+    script_dir = Path(__file__).parent
+    output_dir = script_dir / "constellation_analysis" / "efficiency_matrix"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / output_filename
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     print(f"\n✅ Combined efficiency matrix saved: {output_path}")

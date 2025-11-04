@@ -464,13 +464,17 @@ def generate_combined_efficiency_matrix(base_folder, metric='percentage'):
     
     plt.tight_layout()
     
-    # Save the plot with metric-specific filename
+    # Save the plot with metric-specific filename to constellation_analysis/efficiency_matrix/
     if metric == 'absdata':
         output_filename = 'combined_4d_efficiency_matrix_absdata.png'
     else:
         output_filename = 'combined_4d_efficiency_matrix_percentage.png'
     
-    output_path = base_path.parent / output_filename
+    # Save to constellation_analysis/efficiency_matrix/ directory
+    script_dir = Path(__file__).parent
+    output_dir = script_dir / "constellation_analysis" / "efficiency_matrix"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / output_filename
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     print(f"\n✅ Combined 4D efficiency matrix saved: {output_path}")
