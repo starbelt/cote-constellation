@@ -359,8 +359,11 @@ def generate_combined_connected_idle_matrix_4d(base_folder):
     
     plt.tight_layout()
     
-    # Save the plot
-    output_path = "combined_connected_idle_matrix_4d.png"
+    # Save the plot to constellation_analysis directory
+    script_dir = Path(__file__).parent
+    output_dir = script_dir / "constellation_analysis" / "connected_idle_matrix"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / "combined_connected_idle_matrix_4d.png"
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     print(f"\n✅ 4D Connected Idle Matrix saved: {output_path}")

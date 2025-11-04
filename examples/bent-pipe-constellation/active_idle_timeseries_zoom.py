@@ -335,9 +335,9 @@ def test_single_strategy(strategy="close-spaced", policy="sticky", start_time_st
             # Single column vertical legend positioned to the right
             ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=8, ncol=1)
         
-        # Save test chart to top-level directory (same as script)
-        output_dir = Path(__file__).parent / "active_idle_timeseries_zoom"
-        output_dir.mkdir(exist_ok=True)
+        # Save test chart to constellation_analysis directory
+        output_dir = Path(__file__).parent / "constellation_analysis" / "active_idle_timeseries_zoom"
+        output_dir.mkdir(parents=True, exist_ok=True)
         
         # Create filename with time range info if custom time was specified
         if start_time_str and duration_seconds:

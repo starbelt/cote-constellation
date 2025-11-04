@@ -399,11 +399,11 @@ def generate_combined_idle_matrix_sats(base_folder):
     
     plt.tight_layout()
     
-    # Save the plot to current working directory
-    if base_path.name == ".":
-        output_path = Path.cwd() / 'combined_total_idle_matrix_sats.png'
-    else:
-        output_path = base_path / 'combined_total_idle_matrix_sats.png'
+    # Save the plot to constellation_analysis directory
+    script_dir = Path(__file__).parent
+    output_dir = script_dir / "constellation_analysis" / "total_idle_matrix"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / 'combined_total_idle_matrix_sats.png'
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     print(f"\n✅ Combined 4D total idle matrix saved: {output_path}")

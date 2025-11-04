@@ -267,9 +267,9 @@ def parse_communication_data_optimized(strategy, policy, temp_dir):
 def create_strategy_chart_optimized(strategy, archive_base_path=None):
     """Create a single strategy chart with 4 policies (optimized)."""
     
-    # Create output directory at script level
-    output_dir = SCRIPT_DIR / "active_idle_timeseries"
-    output_dir.mkdir(exist_ok=True)
+    # Create output directory in constellation_analysis
+    output_dir = SCRIPT_DIR / "constellation_analysis" / "active_idle_timeseries"
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     plt.style.use('default')
     sns.set_palette("husl")

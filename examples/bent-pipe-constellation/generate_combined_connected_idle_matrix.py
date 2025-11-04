@@ -356,11 +356,15 @@ def generate_combined_connected_idle_matrix(base_folder, satellite_count=None):
     
     plt.tight_layout()
     
-    # Save the plot to parent directory (one level up) - matching reference style
+    # Save the plot to constellation_analysis directory
+    script_dir = Path(__file__).parent
+    output_dir = script_dir / "constellation_analysis" / "connected_idle_matrix"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
     if satellite_count is not None:
-        output_path = f"combined_connected_idle_matrix_{satellite_count}sats.png"
+        output_path = output_dir / f"combined_connected_idle_matrix_{satellite_count}sats.png"
     else:
-        output_path = "combined_connected_idle_matrix.png"
+        output_path = output_dir / "combined_connected_idle_matrix.png"
     
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()

@@ -348,11 +348,15 @@ def generate_combined_total_idle_matrix_visibility(base_folder, satellite_count=
     
     plt.tight_layout()
     
-    # Save the plot with professional naming convention
+    # Save the plot to constellation_analysis directory
+    script_dir = Path(__file__).parent
+    output_dir = script_dir / "constellation_analysis" / "total_idle_matrix"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
     if satellite_count is not None:
-        output_path = f"combined_total_idle_matrix_visibility_{satellite_count}sats.png"
+        output_path = output_dir / f"combined_total_idle_matrix_visibility_{satellite_count}sats.png"
     else:
-        output_path = "combined_total_idle_matrix_visibility.png"
+        output_path = output_dir / "combined_total_idle_matrix_visibility.png"
     
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
