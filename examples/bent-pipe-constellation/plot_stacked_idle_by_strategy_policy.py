@@ -107,7 +107,7 @@ def get_idle_time(zip_path: str, policy: str) -> float:
     except Exception as e:
         return 0.0
 
-def collect_all_data() -> pd.DataFrame:
+def collect_all_data(results_dir='.') -> pd.DataFrame:
     """
     Collect idle time data for all configurations.
     
@@ -119,7 +119,7 @@ def collect_all_data() -> pd.DataFrame:
     - idle_hours
     """
     # Scan for all configurations
-    configs_df = scan_all_configurations()
+    configs_df = scan_all_configurations(results_dir)
     
     if configs_df.empty:
         print("❌ No constellation_analysis folders found!")
@@ -143,7 +143,7 @@ def collect_all_data() -> pd.DataFrame:
     
     return pd.DataFrame(data)
 
-def create_stacked_bar_chart(df: pd.DataFrame, image_size_kb: int) -> None:
+def create_stacked_bar_chart(df: pd.DataFrame, image_size_kb: int, output_dir: Path) -> None:
     """
     Create stacked bar chart for a single image size.
     
@@ -260,13 +260,16 @@ def create_stacked_bar_chart(df: pd.DataFrame, image_size_kb: int) -> None:
     plt.tight_layout()
     
     # Save
-    output_file = OUTPUT_DIR / f"stacked_idle_time_{image_size_mb:.3f}mb.png"
+    output_file = output_dir / f"stacked_idle_time_{image_size_mb:.3f}mb.png"
     plt.savefig(output_file, dpi=150, bbox_inches='tight')
     plt.close()
     
     print(f"✅ Saved: {output_file}")
 
 def main():
+    # Get results directory from command line or use default
+    results_dir = sys.argv[1] if len(sys.argv) > 1 else 'results/base results 2'
+    
     print("=" * 100)
     print("=" * 18 + " " * 64 + "=" * 18)
     print("=" * 18 + " " * 64 + "IDLE TIME STACKED BAR CHARTS")
@@ -274,13 +277,14 @@ def main():
     print("=" * 100)
     
     # Create output directory
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    output_dir = Path(results_dir) / "comparison_results"
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Scan for configurations
-    print("\nScanning for constellation configurations...")
+    print(f"\nScanning for constellation configurations in: {results_dir}...")
     
     # Collect all data
-    df = collect_all_data()
+    df = collect_all_data(results_dir)
     
     if df.empty:
         print("❌ No configuration data found!")
@@ -292,7 +296,7 @@ def main():
     print(f"Found {len(df)} configuration entries")
     
     # Save raw data
-    csv_output = OUTPUT_DIR / "stacked_idle_time.csv"
+    csv_output = output_dir / "stacked_idle_time.csv"
     df.to_csv(csv_output, index=False)
     print(f"\n✅ Saved: {csv_output}")
     
@@ -300,7 +304,7 @@ def main():
     for image_size_kb in image_sizes_kb:
         image_size_mb = image_size_kb / 1024.0
         print(f"\nCreating stacked bar chart for {image_size_mb:.3f} MB...")
-        create_stacked_bar_chart(df, image_size_kb)
+        create_stacked_bar_chart(df, image_size_kb, output_dir)
     
     # Summary
     print("\n" + "=" * 100)
