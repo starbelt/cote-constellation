@@ -110,8 +110,8 @@ def calculate_effective_throughput(strategy, policy, const_size, img_size):
         return None
 
 # Create output directory
-output_dir = Path("throughput_charts")
-output_dir.mkdir(exist_ok=True)
+output_dir = Path("constellation_analysis") / "throughput_charts"
+output_dir.mkdir(parents=True, exist_ok=True)
 
 # Create the comprehensive comparison chart
 fig, ax = plt.subplots(figsize=(20, 12))

@@ -20,7 +20,7 @@ import zipfile
 from pathlib import Path
 import re
 
-def scan_spacing_sensitivity_configurations(search_dirs=['results/orbit space best constellation size', 'results/base results'], strategies=['orbit-spaced', 'close-orbit-spaced']):
+def scan_spacing_sensitivity_configurations(search_dirs=['results/orbit space best constellation size', 'results/base results 2'], strategies=['orbit-spaced', 'close-orbit-spaced']):
     """Scan for orbit-spaced and close-orbit-spaced configurations in sensitivity study and base results directories"""
     configs = []
     
@@ -124,8 +124,8 @@ def create_sensitivity_distance_charts():
     results_df = pd.DataFrame(results)
     
     # Save raw data
-    output_dir = Path('comparison_charts')
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path('constellation_analysis') / 'comparison_charts'
+    output_dir.mkdir(parents=True, exist_ok=True)
     results_df.to_csv(output_dir / 'spacing_comparison_sensitivity_distance.csv', index=False)
     print(f"✅ Saved: {output_dir / 'spacing_comparison_sensitivity_distance.csv'}")
     print()

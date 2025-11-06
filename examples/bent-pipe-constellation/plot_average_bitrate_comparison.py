@@ -95,8 +95,8 @@ def calculate_average_bitrate(strategy, policy, const_size, img_size):
         return None
 
 # Create output directory
-output_dir = Path("bitrate_charts")
-output_dir.mkdir(exist_ok=True)
+output_dir = Path("constellation_analysis") / "bitrate_charts"
+output_dir.mkdir(parents=True, exist_ok=True)
 
 # Create the comprehensive comparison chart
 fig, ax = plt.subplots(figsize=(20, 12))

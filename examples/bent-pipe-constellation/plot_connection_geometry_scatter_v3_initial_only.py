@@ -27,8 +27,8 @@ import zipfile
 import re
 
 # Configuration
-BASE_RESULTS_DIR = Path("results/base results 2")
-OUTPUT_DIR = Path("connection_geometry_charts_initial")
+BASE_DIR = Path(__file__).parent
+OUTPUT_DIR = Path("constellation_analysis") / "connection_geometry_charts_initial"
 SAT_COUNTS = [1, 25, 50, 100, 200]
 SPACING_STRATEGIES = ['close-spaced', 'orbit-spaced', 'frame-spaced', 'close-orbit-spaced']
 POLICIES = ['sticky', 'fifo', 'roundrobin', 'random']

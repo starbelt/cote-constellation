@@ -108,8 +108,8 @@ def plot_distribution_table():
     plt.tight_layout()
     
     # Save
-    output_dir = Path('comparison_charts')
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path('constellation_analysis') / 'comparison_charts'
+    output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / 'distribution_table_visualization.png'
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
     print(f"\n✅ Saved: {output_file}")

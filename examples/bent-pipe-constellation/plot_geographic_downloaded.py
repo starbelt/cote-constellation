@@ -324,8 +324,8 @@ def main():
     print()
     
     # Create output directory
-    output_dir = Path('comparison_charts')
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path('constellation_analysis') / 'comparison_charts'
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Scan all configurations
     print("Scanning configurations...")

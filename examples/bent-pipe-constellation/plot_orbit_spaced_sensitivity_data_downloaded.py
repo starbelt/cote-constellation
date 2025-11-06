@@ -115,8 +115,8 @@ def create_orbit_spaced_sensitivity_charts():
     results_df = pd.DataFrame(results)
     
     # Save raw data
-    output_dir = Path('orbit_spaced_charts')
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path('constellation_analysis') / 'orbit_spaced_charts'
+    output_dir.mkdir(parents=True, exist_ok=True)
     results_df.to_csv(output_dir / 'orbit_spaced_sensitivity_data_downloaded.csv', index=False)
     print(f"✅ Saved: {output_dir / 'orbit_spaced_sensitivity_data_downloaded.csv'}")
     print()

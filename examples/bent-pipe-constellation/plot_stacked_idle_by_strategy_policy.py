@@ -26,7 +26,7 @@ import re
 
 # Configuration directories
 BASE_DIR = Path(".")
-OUTPUT_DIR = BASE_DIR / "comparison_charts"
+OUTPUT_DIR = BASE_DIR / "constellation_analysis" / "comparison_charts"
 
 # Constants
 STRATEGIES_MAP = {

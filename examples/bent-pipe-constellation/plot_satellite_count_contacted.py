@@ -54,7 +54,7 @@ POLICY_COLORS = {
     "random": "#ff7f0e"       # orange
 }
 
-def scan_all_configurations(search_dir='results/base results'):
+def scan_all_configurations(search_dir='results/base results 2'):
     """Scan for all constellation_analysis folders and their strategy/policy subfolders"""
     configs = []
     

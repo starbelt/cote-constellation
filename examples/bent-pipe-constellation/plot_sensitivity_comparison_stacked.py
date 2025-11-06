@@ -19,12 +19,12 @@ import zipfile
 # Directories to scan (in priority order)
 ORBIT_SPACED_DIRS = [
     Path("results/orbit space best constellation size"),
-    Path("results/base results")
+    Path("results/base results 2")
 ]
 
 CLOSE_ORBIT_SPACED_DIRS = [
     Path("results/close orbit space 25 clusters"),
-    Path("results/base results")
+    Path("results/base results 2")
 ]
 
 # Satellite counts for sensitivity study
