@@ -286,8 +286,8 @@ def create_comparison_chart(image_size_code, image_size_mb):
     plt.tight_layout()
     
     # Save figure
-    output_dir = Path("sensitivity_comparison_charts")
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path("constellation_analysis") / "sensitivity_comparison_charts"
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     output_file = output_dir / f"comparison_stacked_{image_size_code}mb.png"
     plt.savefig(output_file, dpi=150, bbox_inches='tight')

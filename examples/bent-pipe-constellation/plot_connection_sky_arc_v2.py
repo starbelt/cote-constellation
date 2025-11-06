@@ -32,8 +32,9 @@ import re
 from math import radians, cos, sin, atan2, degrees
 
 # Configuration
+SCRIPT_DIR = Path(__file__).parent.absolute()
 BASE_RESULTS_DIR = Path("results/base results 2")
-OUTPUT_DIR = Path("connection_sky_arc_charts")
+OUTPUT_DIR = SCRIPT_DIR / "constellation_analysis" / "connection_sky_arc_charts"
 SAT_COUNTS = [1, 25, 50, 100, 200]
 SPACING_STRATEGIES = ['close-spaced', 'orbit-spaced', 'frame-spaced', 'close-orbit-spaced']
 POLICIES = ['sticky', 'fifo', 'roundrobin', 'random']

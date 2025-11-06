@@ -28,7 +28,7 @@ import matplotlib.cm as cm
 
 # Configuration directories
 BASE_DIR = Path(".")
-OUTPUT_DIR = BASE_DIR / "stacked_satellite_charts"
+OUTPUT_DIR = BASE_DIR / "constellation_analysis" / "stacked_satellite_charts"
 
 # Constants
 STRATEGIES_MAP = {
@@ -262,7 +262,7 @@ def plot_stacked_utilization(data_by_size: Dict, image_size_kb: int):
 
 def main():
     """Main analysis function."""
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
     print("\n" + "="*80)
     print("STACKED SATELLITE UTILIZATION ANALYSIS")

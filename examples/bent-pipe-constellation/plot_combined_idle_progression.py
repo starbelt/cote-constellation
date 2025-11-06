@@ -23,11 +23,14 @@ import zipfile
 from pathlib import Path
 import re
 
-def scan_all_configurations(search_dir='.'):
+# Configuration - use absolute paths
+SCRIPT_DIR = Path(__file__).parent.absolute()
+
+def scan_all_configurations(search_dir='results/base results 2'):
     """Scan for all constellation_analysis folders"""
     configs = []
     
-    search_path = Path(search_dir)
+    search_path = SCRIPT_DIR / search_dir if not Path(search_dir).is_absolute() else Path(search_dir)
     for folder in search_path.glob('constellation_analysis_*'):
         if not folder.is_dir():
             continue
@@ -148,9 +151,9 @@ def create_combined_charts():
     
     results_df = pd.DataFrame(results)
     
-    # Save raw data
-    output_dir = Path('comparison_charts')
-    output_dir.mkdir(exist_ok=True)
+    # Save raw data in centralized constellation_analysis directory
+    output_dir = SCRIPT_DIR / "constellation_analysis" / "idle_progression"
+    output_dir.mkdir(parents=True, exist_ok=True)
     results_df.to_csv(output_dir / 'combined_idle_analysis.csv', index=False)
     print(f"✅ Saved: {output_dir / 'combined_idle_analysis.csv'}")
     print()

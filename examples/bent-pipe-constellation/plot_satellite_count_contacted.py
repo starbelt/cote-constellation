@@ -36,7 +36,7 @@ import re
 
 # Configuration directories
 BASE_DIR = Path(".")
-OUTPUT_DIR = BASE_DIR / "satellite_count_charts"
+OUTPUT_DIR = BASE_DIR / "constellation_analysis" / "satellite_count_charts"
 
 # Constants
 STRATEGIES_MAP = {
@@ -54,7 +54,7 @@ POLICY_COLORS = {
     "random": "#ff7f0e"       # orange
 }
 
-def scan_all_configurations(search_dir='results/base results 2'):
+def scan_all_configurations(search_dir='results/base results'):
     """Scan for all constellation_analysis folders and their strategy/policy subfolders"""
     configs = []
     

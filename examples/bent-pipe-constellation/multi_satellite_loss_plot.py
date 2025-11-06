@@ -411,9 +411,13 @@ def create_plot(strategy_folder, strategy_name, constellation_analysis_folder):
         ax.grid(True, alpha=0.3)
         ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=7)
     
-    # Save plot in the constellation analysis folder with strategy-specific naming
-    output_filename = f"loss_plot_{strategy_name}_strategy.png"
-    output_path = constellation_analysis_folder / output_filename
+    # Save plot in centralized constellation_analysis directory
+    output_dir = SCRIPT_DIR / "constellation_analysis" / "loss_plots"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    constellation_name = constellation_analysis_folder.name
+    output_filename = f"loss_plot_{constellation_name}_{strategy_name}_strategy.png"
+    output_path = output_dir / output_filename
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')

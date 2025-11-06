@@ -483,13 +483,18 @@ def create_idle_time_charts(strategy_folder, strategy_name, constellation_analys
     
     plt.tight_layout()
     
-    # Save plot in the constellation analysis folder with strategy-specific naming
-    output_filename = f"idle_plot_{strategy_name}_strategy.png"
-    output_path = constellation_analysis_folder / output_filename
+    # Save to constellation_analysis/idle_plots/ directory
+    output_dir = SCRIPT_DIR / "constellation_analysis" / "idle_plots"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Include constellation name in filename
+    constellation_name = constellation_analysis_folder.name
+    output_filename = f"idle_plot_{constellation_name}_{strategy_name}_strategy.png"
+    output_path = output_dir / output_filename
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     
-    print(f"Generated {strategy_name} idle plot -> {output_path}")
+    print(f"✅ Generated {strategy_name} idle plot -> {output_filename}")
     return output_path
 
 def main():

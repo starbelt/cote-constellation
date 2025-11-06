@@ -59,8 +59,8 @@ import sys
 import re
 
 # Configuration directories
-BASE_DIR = Path(".")
-OUTPUT_DIR = BASE_DIR / "comparison_charts"
+SCRIPT_DIR = Path(__file__).parent.absolute()
+OUTPUT_DIR = SCRIPT_DIR / "constellation_analysis" / "satellite_utilization"
 
 # Constants
 STRATEGIES_MAP = {

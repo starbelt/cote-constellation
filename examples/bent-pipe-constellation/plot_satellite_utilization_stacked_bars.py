@@ -25,7 +25,7 @@ import re
 
 # Configuration
 BASE_DIR = Path(".")
-OUTPUT_DIR = BASE_DIR / "utilization_stacked_charts"
+OUTPUT_DIR = BASE_DIR / "constellation_analysis" / "utilization_stacked_charts"
 
 STRATEGIES_MAP = {
     "close-spaced": "Close",
