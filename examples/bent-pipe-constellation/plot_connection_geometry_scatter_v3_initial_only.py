@@ -28,6 +28,7 @@ import re
 
 # Configuration
 BASE_DIR = Path(__file__).parent
+BASE_RESULTS_DIR = BASE_DIR / "results" / "base results 2"
 OUTPUT_DIR = Path("constellation_analysis") / "connection_geometry_charts_initial"
 SAT_COUNTS = [1, 25, 50, 100, 200]
 SPACING_STRATEGIES = ['close-spaced', 'orbit-spaced', 'frame-spaced', 'close-orbit-spaced']
