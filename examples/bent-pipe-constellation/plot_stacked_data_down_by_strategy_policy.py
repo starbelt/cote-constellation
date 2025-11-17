@@ -106,9 +106,9 @@ def create_stacked_bar_charts(results_dir='results/base results 2'):
     
     results_df = pd.DataFrame(results)
     
-    # Save raw data - output to comparison_results within the results directory
-    output_dir = Path(results_dir) / 'comparison_results'
-    output_dir.mkdir(exist_ok=True)
+    # Save raw data - output to constellation_analysis top level folder
+    output_dir = Path('constellation_analysis') / 'data_downloaded_charts'
+    output_dir.mkdir(parents=True, exist_ok=True)
     results_df.to_csv(output_dir / 'stacked_data_downloaded.csv', index=False)
     print(f"✅ Saved: {output_dir / 'stacked_data_downloaded.csv'}")
     print()

@@ -277,7 +277,7 @@ def main():
     print("=" * 100)
     
     # Create output directory
-    output_dir = Path(results_dir) / "comparison_results"
+    output_dir = Path("constellation_analysis") / "idle_time_charts"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Scan for configurations
