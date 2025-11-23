@@ -10,6 +10,8 @@
 #include "ShortestJobFirstPolicy.hpp"
 #include "ShortestRemainingTimePolicy.hpp"
 #include "StickyPolicy.hpp"
+#include "MaxDownloadPolicy.hpp"
+#include "MaxDownloadPreemptivePolicy.hpp"
 
 class PolicyFactory {
 public:
@@ -26,6 +28,10 @@ public:
             return std::make_unique<ShortestRemainingTimePolicy>();
         } else if(policyName == "sticky" || policyName == "greedy") {
             return std::make_unique<StickyPolicy>();
+        } else if(policyName == "maxdownload" || policyName == "max-download" || policyName == "maxdown" || policyName == "max-down" || policyName == "max_down") {
+            return std::make_unique<MaxDownloadPolicy>();
+        } else if(policyName == "maxdownloadpreemptive" || policyName == "max-download-preemptive" || policyName == "preemptive") {
+            return std::make_unique<MaxDownloadPreemptivePolicy>();
         }
         // Default to sticky (original bent-pipe behavior)
         return std::make_unique<StickyPolicy>();

@@ -13,7 +13,7 @@
 VisibilityLogger::VisibilityLogger(const std::filesystem::path& logDirectory) {
   std::filesystem::path visibilityLogPath = logDirectory / "visibility_log.csv";
   visibilityLog.open(visibilityLogPath.string());
-  visibilityLog << "time,sat_id,in_view,connected,buffer_mb,downloaded_mb,image_taken,lat_deg,lon_deg,freshness_timestamp,distance_km,elevation_deg\n";
+  visibilityLog << "time,sat_id,in_view,connected,buffer_mb,downloaded_mb,image_taken,lat_deg,lon_deg,freshness_timestamp,distance_km,elevation_deg,decision_interval,bitrate_mbps\n";
 }
 
 VisibilityLogger::~VisibilityLogger() {
@@ -32,7 +32,9 @@ void VisibilityLogger::writeEntry(
     double lonDeg,
     const std::string& timestamp,
     double distanceKm,
-    double elevationDeg
+    double elevationDeg,
+    uint32_t decisionInterval,
+    double bitrateMbps
 ) {
   visibilityLog << simTimeSeconds << ","
                << SAT_ID << ","
@@ -45,7 +47,9 @@ void VisibilityLogger::writeEntry(
                << std::fixed << std::setprecision(6) << lonDeg << ","
                << timestamp << ","
                << std::fixed << std::setprecision(3) << distanceKm << ","
-               << std::fixed << std::setprecision(2) << elevationDeg << "\n";
+               << std::fixed << std::setprecision(2) << elevationDeg << ","
+               << decisionInterval << ","
+               << std::fixed << std::setprecision(3) << bitrateMbps << "\n";
 }
 
 void VisibilityLogger::close() {

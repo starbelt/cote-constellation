@@ -18,8 +18,8 @@
 #   ./run_analysis.sh "" "50,100" orbit-spaced           # All policies, 2 sat counts, 1 strategy
 #
 # Valid values (use comma-separated for multiple):
-#   policies:    sticky, fifo, roundrobin, random (or "" for all)
-#   sat_counts:  1, 10, 15, 17, 18, 19, 20, 25, 50, 100, 200 (or "" for all)
+#   policies:    sticky, fifo, roundrobin, random, maxdownload (or "" for all)
+#   sat_counts:  1, 25, 50, 100, 200 (or "" for all)
 #   spacings:    close-spaced, orbit-spaced, frame-spaced, close-orbit-spaced (or "" for all)
 #   image_sizes: 028, 280, 2800, 28000, 280000 (or "" for all)
 
@@ -34,8 +34,8 @@ PARAM_SPACING=${3:-""}
 PARAM_IMAGE_SIZE=${4:-""}
 
 # Define all possible values
-ALL_POLICIES=("sticky" "fifo" "roundrobin" "random")
-ALL_SAT_COUNTS=(1 10 15 17 18 19 20 21 22 25 50 100 200)
+ALL_POLICIES=("sticky" "fifo" "roundrobin" "random" "maxdownload")
+ALL_SAT_COUNTS=(1 25 50 100 200)
 ALL_SPACING_STRATEGIES=("close-spaced" "close-orbit-spaced" "frame-spaced" "orbit-spaced")
 ALL_IMAGE_SIZES=(028 280 2800 28000 280000 1024000)
 
@@ -66,13 +66,13 @@ if parse_list "$PARAM_POLICY" "POLICY_LIST"; then
     POLICIES=()
     for policy in "${POLICY_LIST[@]}"; do
         case "$policy" in
-            sticky|fifo|roundrobin|random)
+            sticky|fifo|roundrobin|random|maxdownload)
                 POLICIES+=("$policy")
                 ;;
             *)
                 echo "❌ Error: Invalid policy '$policy'"
-                echo "   Valid options: sticky, fifo, roundrobin, random"
-                echo "   Use comma-separated list: fifo,roundrobin"
+                echo "   Valid options: sticky, fifo, roundrobin, random, maxdownload"
+                echo "   Use comma-separated list: fifo,roundrobin,maxdownload"
                 exit 1
                 ;;
         esac
@@ -86,13 +86,13 @@ if parse_list "$PARAM_SAT_COUNT" "SAT_COUNT_LIST"; then
     SAT_COUNTS=()
     for count in "${SAT_COUNT_LIST[@]}"; do
         case "$count" in
-            1|10|15|17|18|19|20|21|22|25|50|100|200)
+            1|25|50|100|200)
                 SAT_COUNTS+=("$count")
                 ;;
             *)
                 echo "❌ Error: Invalid satellite count '$count'"
-                echo "   Valid options: 1, 10, 15, 17, 18, 19, 20, 21, 22, 25, 50, 100, 200"
-                echo "   Use comma-separated list: 10,15,17,18,19,20,21,22,25,50,100"
+                echo "   Valid options: 1, 25, 50, 100, 200"
+                echo "   Use comma-separated list: 25,50,100,200"
                 exit 1
                 ;;
         esac
@@ -172,6 +172,14 @@ fi
 
 cd "$SCRIPT_DIR"
 
+# Create timestamped results directory
+RESULTS_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+RESULTS_DIR="results/maxdownload_${RESULTS_TIMESTAMP}"
+mkdir -p "$RESULTS_DIR"
+
+echo "📂 Results will be saved to: $RESULTS_DIR"
+echo ""
+
 # Step 1: Build the simulation once
 echo "🔨 STEP 1: Building Simulation"
 echo "============================================================"
@@ -214,7 +222,7 @@ for IMAGE_SIZE_CODE in "${IMAGE_SIZES[@]}"; do
         
         # Create timestamped output directory with image size and satellite count
         timestamp=$(date +"%Y%m%d_%H%M%S")
-        OUTPUT_DIR="constellation_analysis_${timestamp}_${IMAGE_SIZE_FORMATTED}_${SAT_COUNT_FORMATTED}"
+        OUTPUT_DIR="${RESULTS_DIR}/constellation_analysis_${timestamp}_${IMAGE_SIZE_FORMATTED}_${SAT_COUNT_FORMATTED}"
         mkdir -p "$OUTPUT_DIR"
         
         echo ""
@@ -328,8 +336,8 @@ echo "   Image sizes: ${IMAGE_SIZES[*]}"
 echo ""
 
 # Show generated directories
-echo "📁 Generated directories:"
-ls -1dt constellation_analysis_* 2>/dev/null | head -10 | while read dir; do
+echo "📁 Generated directories in $RESULTS_DIR:"
+ls -1dt "${RESULTS_DIR}"/constellation_analysis_* 2>/dev/null | head -10 | while read dir; do
     if [ -d "$dir" ]; then
         # Extract info from directory name
         dir_name=$(basename "$dir")
@@ -345,6 +353,8 @@ ls -1dt constellation_analysis_* 2>/dev/null | head -10 | while read dir; do
     fi
 done
 
+echo ""
+echo "💡 Results location: $RESULTS_DIR"
 echo ""
 echo "💡 Next steps:"
 echo "   • Run analysis scripts on generated data"

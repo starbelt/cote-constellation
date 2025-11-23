@@ -87,7 +87,7 @@ def create_stacked_bar_charts(results_dir='results/base results 2'):
     # Group by image_size, strategy, and num_sats
     grouped = configs_df.groupby(['image_size_kb', 'strategy', 'num_sats'])
     
-    policies = ['sticky', 'fifo', 'roundrobin', 'random']
+    policies = ['sticky', 'fifo', 'roundrobin', 'random', 'maxdownload']
     
     for (image_size_kb, strategy, num_sats), group in grouped:
         image_size_mb = image_size_kb / 1000.0
@@ -124,15 +124,16 @@ def create_charts(results_df, output_dir):
     # Get unique values
     image_sizes = sorted(results_df['image_size_mb'].unique())
     strategies = ['close-spaced', 'orbit-spaced', 'frame-spaced', 'close-orbit-spaced']
-    policies = ['sticky', 'fifo', 'roundrobin', 'random']
+    policies = ['sticky', 'fifo', 'roundrobin', 'random', 'maxdownload']
     sat_counts = sorted(results_df['num_sats'].unique())  # Use whatever exists in data
     
-    # Color scheme by policy (4 distinct colors for stacks)
+    # Color scheme by policy (5 distinct colors for stacks)
     policy_colors = {
         'sticky': '#E63946',      # Red
         'fifo': '#2E86AB',        # Blue
         'roundrobin': '#06A77D',  # Green
-        'random': '#F77F00'       # Orange
+        'random': '#F77F00',      # Orange
+        'maxdownload': '#9D4EDD'  # Purple
     }
     
     # Strategy labels (shortened)
@@ -270,11 +271,12 @@ def create_charts(results_df, output_dir):
     print()
     print("  Y-AXIS: Total data downloaded (GB)")
     print()
-    print("  STACKS: Each bar divided by 4 policies:")
+    print("  STACKS: Each bar divided by 5 policies:")
     print("    🔴 Red    = STICKY")
     print("    🔵 Blue   = FIFO")
     print("    🟢 Green  = ROUNDROBIN")
     print("    🟠 Orange = RANDOM")
+    print("    🟣 Purple = MAXDOWNLOAD")
     print()
     print(f"  RESULT: {len(image_sizes)} chart(s) (one per image size)")
     print(f"          {4 * len(sat_counts)} stacked bars per chart (4 strategies × {len(sat_counts)} constellation sizes)")

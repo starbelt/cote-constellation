@@ -144,7 +144,7 @@ def calculate_downloaded_data(policy_dir):
 
 def calculate_efficiency_for_strategy(strategy_folder):
     """Calculate efficiency percentages and absolute downloads for all policies in a strategy"""
-    policies = ["sticky", "roundrobin", "fifo", "random"]
+    policies = ["sticky", "roundrobin", "fifo", "random", "maxdownload"]
     results = {}
     download_data = {}
     
@@ -265,7 +265,7 @@ def generate_combined_efficiency_matrix(base_folder, metric='percentage'):
     print(f"  📊 Total combinations: {len(image_sizes)} × {len(satellite_counts)} = {len(image_sizes) * len(satellite_counts)}")
     
     strategies = ["close-spaced", "frame-spaced", "orbit-spaced", "close-orbit-spaced"]
-    policies = ["sticky", "roundrobin", "fifo", "random"]
+    policies = ["sticky", "roundrobin", "fifo", "random", "maxdownload"]
     
     # Calculate efficiency for each parameter combination
     all_efficiency_data = {}

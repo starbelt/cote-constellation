@@ -293,6 +293,8 @@ int main(int argc, char** argv) {
   std::map<uint32_t, bool> satId2PrevInView;
   std::map<uint32_t, bool> satId2PrevConnected;
   std::map<uint32_t, uint64_t> satId2DownloadedBits; // Track downloaded bits per timestep
+  uint32_t currentDecisionInterval = 0; // Track decision interval number
+  std::map<uint32_t, std::vector<uint32_t>> gndId2PrevInViewSet; // Previous in-view satellite IDs
   for(size_t i=0; i<satellites.size(); i++) {
     uint32_t id = satellites.at(i).getID();
     satId2ImageTaken[id] = false;
@@ -302,6 +304,9 @@ int main(int argc, char** argv) {
     satId2PrevInView[id] = false;
     satId2PrevConnected[id] = false;
     satId2DownloadedBits[id] = 0;
+  }
+  for(size_t i=0; i<groundStations.size(); i++) {
+    gndId2PrevInViewSet[groundStations.at(i).getID()] = std::vector<uint32_t>();
   }
   
   // Create scheduling policy and spacing strategy
@@ -359,6 +364,29 @@ int main(int argc, char** argv) {
         gndId2CurrSat[GND_ID] = NULL;
       }
     }
+    
+    // Check if in-view satellite set has changed for any ground station (decision interval)
+    bool inViewSetChanged = false;
+    for(size_t i=0; i<groundStations.size(); i++) {
+      const uint32_t GND_ID = groundStations.at(i).getID();
+      std::vector<uint32_t> currentInViewSet;
+      for(const auto* sat : gndId2VisSats[GND_ID]) {
+        currentInViewSet.push_back(sat->getID());
+      }
+      std::sort(currentInViewSet.begin(), currentInViewSet.end());
+      
+      // Compare with previous in-view set
+      if(currentInViewSet != gndId2PrevInViewSet[GND_ID]) {
+        inViewSetChanged = true;
+        gndId2PrevInViewSet[GND_ID] = currentInViewSet;
+      }
+    }
+    
+    // Increment decision interval when in-view set changes
+    if(inViewSetChanged) {
+      currentDecisionInterval++;
+    }
+    
     // Simulation logic: create channels and downlink data
     for(size_t i=0; i<groundStations.size(); i++) {
       const uint32_t GND_ID = groundStations.at(i).getID();
@@ -366,7 +394,7 @@ int main(int argc, char** argv) {
       cote::Satellite* previousSat = gndId2CurrSat[GND_ID];
       cote::Satellite* selectedSat = policy->makeSchedulingDecision(
         gndId2VisSats[GND_ID], satId2Sensor, satId2Occupied, dateTime, GND_ID,
-        gndId2CurrSat[GND_ID], stepCount
+        gndId2CurrSat[GND_ID], stepCount, &groundStations.at(i)
       );
       
       if(selectedSat != previousSat) {
@@ -560,9 +588,10 @@ int main(int argc, char** argv) {
           double lonDeg = imageTaken ? satId2ImageLon[SAT_ID] : cote::util::calcSubpointLongitude(JD, SEC, NS, satEciPosn);
           std::string timestamp = imageTaken ? satId2ImageTimestamp[SAT_ID] : "";
           
-          // Calculate distance and elevation for in-view or connected satellites
+          // Calculate distance, elevation, and bitrate for in-view or connected satellites
           double distanceKm = 0.0;
           double elevationDeg = 0.0;
+          double bitrateMbps = 0.0;
           if(inView || connected) {
             // Find the closest ground station with elevation >= 10 degrees
             double minDistance = 1e9;
@@ -598,6 +627,13 @@ int main(int argc, char** argv) {
                 cote::util::calcSeparationVector(satEciPosn, gndEciPosn)
               );
               elevationDeg = cote::util::calcElevationDeg(JD,SEC,NS,GND_LAT,GND_LON,GND_HAE,satEciPosn);
+              
+              // Calculate theoretical bitrate using Channel
+              cote::Channel tempChannel(
+                satId2Tx[SAT_ID], gndId2Rx[bestGndIdx], 
+                txCenterFrequencyHz, txBandwidthHz, &dateTime
+              );
+              bitrateMbps = static_cast<double>(tempChannel.getMaxBitsPerSec()) / 1.0e6;
             }
           }
           
@@ -605,7 +641,8 @@ int main(int argc, char** argv) {
           visibilityLogger.writeEntry(
             simTimeSeconds, SAT_ID, (inView ? 1 : 0), (connected ? 1 : 0),
             bufferMB, downloadedMB, (imageTaken ? 1 : 0),
-            latDeg, lonDeg, timestamp, distanceKm, elevationDeg
+            latDeg, lonDeg, timestamp, distanceKm, elevationDeg, currentDecisionInterval,
+            bitrateMbps
           );
         }
         

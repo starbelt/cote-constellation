@@ -37,7 +37,9 @@ public:
     double lonDeg,
     const std::string& timestamp,
     double distanceKm,
-    double elevationDeg
+    double elevationDeg,
+    uint32_t decisionInterval,
+    double bitrateMbps
   );
   
   // Close the log file
