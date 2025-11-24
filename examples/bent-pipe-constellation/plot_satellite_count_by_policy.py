@@ -2,26 +2,18 @@
 """
 Plot Satellite Count Contacted: How many unique satellites get contacted?
 
+FLIPPED VERSION: Policies on X-axis, Strategies in legend
+
 Shows the COUNT of unique satellites that receive at least one ground station
 connection during the entire simulation period. This reveals "satellite starvation"
 by showing the absolute number of satellites used vs total available.
 
-KEY DIFFERENCES FROM PERCENTAGE VERSION:
------------------------------------------
-- Shows RAW COUNTS (e.g., "11 out of 200") instead of percentages
-- Makes it easier to see the absolute scale of satellite starvation
-- Y-axis scales to match constellation size for each group
-
-Examples:
-- If only sat0 connects repeatedly: count = 1
-- If all 25 sats in constellation connect at least once: count = 25
-- If 11 out of 200 sats connect: count = 11 (189 satellites starved!)
-
 Chart Structure:
 ----------------
-X-axis: Strategy groups (Close, Orbit, Frame, Close-Orbit)
+X-axis: Policy groups (STICKY, FIFO, ROUNDROBIN, RANDOM, MAXDOWNLOAD)
+        Each group shows results for different constellation sizes (1, 25, 50, 100, 200)
 Y-axis: Number of unique satellites contacted (0 to constellation size)
-Colors: Different policies (STICKY=red, FIFO=blue, ROUNDROBIN=green, RANDOM=orange)
+Colors: Different strategies (Close=red, Orbit=blue, Frame=green, Close-Orbit=orange)
 Output: Multiple charts - one per image size tested
 """
 
@@ -54,13 +46,19 @@ POLICY_COLORS = {
     "random": "#F77F00",      # orange
     "maxdownload": "#9D4EDD"  # purple
 }
+STRATEGY_COLORS = {
+    "close-spaced": "#E63946",       # red
+    "orbit-spaced": "#2E86AB",       # blue
+    "frame-spaced": "#06A77D",       # green
+    "close-orbit-spaced": "#F77F00"  # orange
+}
 
 def scan_all_configurations(search_dir='results/maxdownload_20251118_162637'):
     """Scan for all constellation_analysis folders and their strategy/policy subfolders"""
     configs = []
     
     search_path = Path(search_dir)
-    # Search in specified directory (base results 2)
+    # Search in specified directory
     for constellation_folder in search_path.glob('constellation_analysis_*'):
         if not constellation_folder.is_dir():
             continue
@@ -112,7 +110,6 @@ def scan_all_configurations(search_dir='results/maxdownload_20251118_162637'):
                 continue
     
     return configs
-
 
 def get_contacted_satellites(strategy_folder: Path, policy: str) -> Tuple[Set[int], int]:
     """
@@ -209,97 +206,101 @@ def calculate_satellite_counts(configs: List[Dict]) -> Dict:
     
     return results
 
-def plot_satellite_count_charts(results: Dict):
-    """Create grouped bar charts showing satellite count contacted"""
+def plot_satellite_count_by_policy(results: Dict):
+    """
+    Create grouped bar charts with policies on X-axis and strategies as different colored bars.
+    This is the FLIPPED version.
+    """
     
     OUTPUT_DIR.mkdir(exist_ok=True)
     
     # Create one chart per image size
     for image_size in sorted(results.keys()):
-        fig, ax = plt.subplots(figsize=(20, 10))
+        fig, ax = plt.subplots(figsize=(22, 10))
         
         strategies = list(STRATEGIES_MAP.keys())
-        num_policies = len(POLICIES)
+        num_strategies = len(strategies)
         
-        # Bar positioning - each strategy/constellation combo gets 5 bars (one per policy)
+        # Bar positioning - each policy/constellation combo gets 4 bars (one per strategy)
         bar_width = 0.15
-        policy_group_width = num_policies * bar_width
-        strategy_spacing = 0.5  # Increased spacing between strategies
+        strategy_group_width = num_strategies * bar_width
+        policy_spacing = 0.5
         
         x_offset = 0
         x_positions_for_labels = []
         max_y = 0
         
-        # For each strategy
-        for strategy_idx, strategy in enumerate(strategies):
-            if strategy not in results[image_size]:
-                continue
-            
-            strategy_data = results[image_size][strategy]
-            
-            # For each constellation size within the strategy
+        # For each policy
+        for policy_idx, policy in enumerate(POLICIES):
+            # For each constellation size
             for sat_count in CONSTELLATION_SIZES:
-                if sat_count not in strategy_data:
-                    continue
-                
-                # Draw 5 bars (one per policy) for this strategy/constellation combo
-                for policy_idx, policy in enumerate(POLICIES):
-                    if policy not in strategy_data[sat_count]:
+                # Draw 4 bars (one per strategy) for this policy/constellation combo
+                for strategy_idx, strategy in enumerate(strategies):
+                    if strategy not in results[image_size]:
+                        count = 0
+                        total = sat_count
+                    elif sat_count not in results[image_size][strategy]:
+                        count = 0
+                        total = sat_count
+                    elif policy not in results[image_size][strategy][sat_count]:
                         count = 0
                         total = sat_count
                     else:
-                        count, total = strategy_data[sat_count][policy]
+                        count, total = results[image_size][strategy][sat_count][policy]
                     
                     max_y = max(max_y, total)
                     
-                    x_pos = x_offset + policy_idx * bar_width
+                    x_pos = x_offset + strategy_idx * bar_width
                     
                     ax.bar(x_pos, count, bar_width,
-                          color=POLICY_COLORS[policy],
+                          color=STRATEGY_COLORS[strategy],
                           edgecolor='black',
                           linewidth=0.5,
-                          label=policy.upper() if strategy_idx == 0 and sat_count == CONSTELLATION_SIZES[0] else "")
+                          label=STRATEGIES_MAP[strategy] if policy_idx == 0 and sat_count == CONSTELLATION_SIZES[0] else "")
                     
                     # Add count label on top of bar
-                    if count > 0:
+                    if count > 0 and count < total * 0.95:  # Only show if not at max
                         ax.text(x_pos, count + max_y * 0.01, f"{count}",
-                               ha='center', va='bottom', fontsize=7, fontweight='bold')
+                               ha='center', va='bottom', fontsize=6, fontweight='bold')
                 
                 # Mark the center of this group for labeling
-                x_positions_for_labels.append((x_offset + policy_group_width/2, f"{sat_count}"))
-                x_offset += policy_group_width + 0.1  # small gap between constellation sizes
+                x_positions_for_labels.append((x_offset + strategy_group_width/2, f"{sat_count}"))
+                x_offset += strategy_group_width + 0.08
             
-            # Add extra spacing between strategies
-            x_offset += strategy_spacing
+            # Add extra spacing between policies
+            x_offset += policy_spacing
         
-        # Add constellation size labels on x-axis and strategy labels below
+        # Set x-axis labels (constellation sizes)
         ax.set_xticks([pos for pos, label in x_positions_for_labels])
         ax.set_xticklabels([label for pos, label in x_positions_for_labels], 
                           rotation=0, ha='center', fontsize=9)
+        ax.set_xlabel('Number of Satellites', fontsize=14, fontweight='bold')
         
-        # Add strategy group labels below the constellation sizes
+        # Add policy group labels on secondary x-axis
+        policy_centers = []
         x_offset = 0
-        for strategy_idx, strategy in enumerate(strategies):
-            if strategy not in results[image_size]:
-                continue
-            
-            # Count how many constellation sizes this strategy has
-            strategy_data = results[image_size][strategy]
-            num_constellations = len([sc for sc in CONSTELLATION_SIZES if sc in strategy_data])
-            
-            # Calculate center position for strategy label
-            strategy_width = num_constellations * (policy_group_width + 0.1) - 0.1
-            x_center = x_offset + strategy_width / 2
-            
-            ax.text(x_center, -max_y * 0.12, STRATEGIES_MAP[strategy], 
-                   ha='center', va='top', fontsize=14, fontweight='bold')
-            
-            x_offset += strategy_width + strategy_spacing
+        for policy in POLICIES:
+            num_bars = len(CONSTELLATION_SIZES)
+            center = x_offset + (num_bars * (strategy_group_width + 0.08) - 0.08) / 2
+            policy_centers.append(center)
+            x_offset += num_bars * (strategy_group_width + 0.08) + policy_spacing
         
-        # Styling
+        ax2 = ax.secondary_xaxis('bottom')
+        ax2.set_xticks(policy_centers)
+        ax2.set_xticklabels([p.upper() for p in POLICIES], 
+                            fontsize=15, fontweight='bold')
+        ax2.tick_params(axis='x', which='major', pad=35)
+        
+        # Add vertical separators between policy groups
+        x_offset = 0
+        for policy_idx in range(1, len(POLICIES)):
+            separator_x = x_offset + len(CONSTELLATION_SIZES) * (strategy_group_width + 0.08) + policy_spacing / 2
+            ax.axvline(x=separator_x, color='black', linestyle='-', linewidth=2, alpha=0.3)
+            x_offset += len(CONSTELLATION_SIZES) * (strategy_group_width + 0.08) + policy_spacing
+        
+        # Y-axis
         ax.set_ylabel('Number of Unique Satellites Contacted', fontsize=14, fontweight='bold')
-        ax.set_title(f'Satellite Contact Count by Strategy & Policy\n'
-                    f'Image Size: {image_size} KB | Shows how many unique satellites were contacted at least once',
+        ax.set_title(f'Satellite Contact Count by Policy, Constellation Size, and Strategy\n{image_size} KB Images',
                     fontsize=16, fontweight='bold', pad=20)
         
         ax.set_ylim(0, max_y * 1.15)
@@ -310,29 +311,29 @@ def plot_satellite_count_charts(results: Dict):
         for const_size in CONSTELLATION_SIZES:
             if const_size <= max_y:
                 ax.axhline(y=const_size, color='gray', linestyle=':', linewidth=1, alpha=0.4)
-                ax.text(ax.get_xlim()[1] * 0.98, const_size, f'{const_size} sats', 
-                       ha='right', va='bottom', fontsize=8, color='gray')
+                ax.text(ax.get_xlim()[1] * 0.99, const_size + max_y * 0.01, f'{const_size}', 
+                       ha='right', va='bottom', fontsize=8, color='gray', fontweight='bold')
         
-        # Legend - compact horizontal layout
+        # Legend
         handles, labels = ax.get_legend_handles_labels()
-        # Remove duplicate labels
         by_label = dict(zip(labels, handles))
         ax.legend(by_label.values(), by_label.keys(), 
-                 loc='upper right', ncol=5, framealpha=0.9, fontsize=11, 
-                 title='Policy', title_fontsize=11, frameon=True, shadow=False)
+                 loc='upper left', ncol=4, framealpha=0.95, fontsize=12, 
+                 title='Spacing Strategy', title_fontsize=13, frameon=True, edgecolor='black')
         
         plt.tight_layout()
         
-        output_file = OUTPUT_DIR / f'satellite_count_comparison_{image_size}kb.png'
-        plt.savefig(output_file, dpi=150, bbox_inches='tight')
+        # Save
+        output_file = OUTPUT_DIR / f'satellite_count_by_policy_{image_size}kb.png'
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
         print(f"\n✅ Saved: {output_file}")
         plt.close()
 
 def main():
-    print("=" * 80)
-    print("SATELLITE COUNT ANALYSIS")
-    print("Counting unique satellites contacted during simulation")
-    print("=" * 80)
+    print("=" * 100)
+    print(" " * 30 + "SATELLITE COUNT ANALYSIS")
+    print(" " * 25 + "(Policies on X-axis, Strategies as Colors)")
+    print("=" * 100)
     
     # Scan for all configurations
     configs = scan_all_configurations()
@@ -348,12 +349,12 @@ def main():
     results = calculate_satellite_counts(configs)
     
     # Create visualizations
-    print("\nGenerating charts...")
-    plot_satellite_count_charts(results)
+    print("\nGenerating charts (policies on X-axis)...")
+    plot_satellite_count_by_policy(results)
     
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 100)
     print("✅ ANALYSIS COMPLETE!")
-    print("=" * 80)
+    print("=" * 100)
     
     # Print summary statistics
     print("\n📊 Summary Statistics:")
