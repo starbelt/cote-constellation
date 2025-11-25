@@ -97,7 +97,7 @@ def create_stacked_bar_charts(results_dir='results/base results 2'):
         # Group by image_size, strategy, and num_sats
         grouped = configs_df.groupby(['image_size_kb', 'strategy', 'num_sats'])
         
-        policies = ['sticky', 'fifo', 'roundrobin', 'random', 'maxdownload']
+        policies = ['sticky', 'fifo', 'roundrobin', 'random', 'mindistance', 'maxdownload']
         
         for (image_size_kb, strategy, num_sats), group in grouped:
             image_size_mb = image_size_kb / 1000.0
@@ -134,7 +134,7 @@ def create_charts(results_df, output_dir):
     # Get unique values
     image_sizes = sorted(results_df['image_size_mb'].unique())
     strategies = ['close-spaced', 'orbit-spaced', 'frame-spaced', 'close-orbit-spaced']
-    policies = ['sticky', 'fifo', 'roundrobin', 'random', 'maxdownload']
+    policies = ['sticky', 'fifo', 'roundrobin', 'random', 'mindistance', 'maxdownload']
     sat_counts = sorted(results_df['num_sats'].unique())
     
     # Color scheme by STRATEGY (4 distinct colors for stacks)
@@ -151,6 +151,7 @@ def create_charts(results_df, output_dir):
         'fifo': 'FIFO',
         'roundrobin': 'ROUNDROBIN',
         'random': 'RANDOM',
+        'mindistance': 'MINDISTANCE',
         'maxdownload': 'MAXDOWNLOAD'
     }
     

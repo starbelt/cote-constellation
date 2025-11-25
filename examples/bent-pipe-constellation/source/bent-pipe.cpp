@@ -387,6 +387,23 @@ int main(int argc, char** argv) {
       currentDecisionInterval++;
     }
     
+    // Pre-calculate bitrates for all in-view satellites (used by both scheduling and logging)
+    std::map<uint32_t,double> satId2BitrateMbps;
+    for(size_t i=0; i<groundStations.size(); i++) {
+      const uint32_t GND_ID = groundStations.at(i).getID();
+      for(auto* sat : gndId2VisSats[GND_ID]) {
+        uint32_t satId = sat->getID();
+        // Only calculate if not already cached (satellite might be visible to multiple ground stations)
+        if(satId2BitrateMbps.find(satId) == satId2BitrateMbps.end()) {
+          cote::Channel tempChannel(
+            satId2Tx[satId], gndId2Rx[GND_ID],
+            txCenterFrequencyHz, txBandwidthHz, &dateTime
+          );
+          satId2BitrateMbps[satId] = static_cast<double>(tempChannel.getMaxBitsPerSec()) / 1.0e6;
+        }
+      }
+    }
+    
     // Simulation logic: create channels and downlink data
     for(size_t i=0; i<groundStations.size(); i++) {
       const uint32_t GND_ID = groundStations.at(i).getID();
@@ -394,7 +411,7 @@ int main(int argc, char** argv) {
       cote::Satellite* previousSat = gndId2CurrSat[GND_ID];
       cote::Satellite* selectedSat = policy->makeSchedulingDecision(
         gndId2VisSats[GND_ID], satId2Sensor, satId2Occupied, dateTime, GND_ID,
-        gndId2CurrSat[GND_ID], stepCount, &groundStations.at(i)
+        gndId2CurrSat[GND_ID], stepCount, &groundStations.at(i), satId2BitrateMbps
       );
       
       if(selectedSat != previousSat) {
@@ -574,8 +591,8 @@ int main(int argc, char** argv) {
         bool connectionChanged = (connected != satId2PrevConnected[SAT_ID]);
         bool imageTaken = satId2ImageTaken[SAT_ID];
         
-        // Hybrid logging: every timestep when connected, or only on events when not connected
-        if(connected || visibilityChanged || connectionChanged || imageTaken) {
+        // Log in-view satellites for optimality analysis, plus event-driven logging
+        if(inView || connected || visibilityChanged || connectionChanged || imageTaken) {
           // Get current buffer in MB
           double bufferMB = (static_cast<double>(satId2Sensor[SAT_ID]->getBitsBuffered())/8.0)/1.0e6;
           
@@ -628,12 +645,10 @@ int main(int argc, char** argv) {
               );
               elevationDeg = cote::util::calcElevationDeg(JD,SEC,NS,GND_LAT,GND_LON,GND_HAE,satEciPosn);
               
-              // Calculate theoretical bitrate using Channel
-              cote::Channel tempChannel(
-                satId2Tx[SAT_ID], gndId2Rx[bestGndIdx], 
-                txCenterFrequencyHz, txBandwidthHz, &dateTime
-              );
-              bitrateMbps = static_cast<double>(tempChannel.getMaxBitsPerSec()) / 1.0e6;
+              // Use pre-calculated bitrate from cache if available
+              if(satId2BitrateMbps.find(SAT_ID) != satId2BitrateMbps.end()) {
+                bitrateMbps = satId2BitrateMbps[SAT_ID];
+              }
             }
           }
           

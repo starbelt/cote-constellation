@@ -11,6 +11,23 @@
 
 class SchedulingPolicy {
 public:
+    // Extended interface - with bitrate information for smart policies
+    virtual cote::Satellite* makeSchedulingDecision(
+        const std::vector<cote::Satellite*>& visibleSats,
+        const std::map<uint32_t,cote::Sensor*>& satId2Sensor,
+        const std::map<uint32_t,bool>& satId2Occupied,
+        const cote::DateTime& currentTime,
+        uint32_t groundStationId,
+        cote::Satellite* currentSat,
+        uint64_t stepCount,
+        cote::GroundStation* groundStation,
+        const std::map<uint32_t,double>& satId2BitrateMbps
+    ) {
+        // Default: call the 8-parameter version for backward compatibility
+        return makeSchedulingDecision(visibleSats, satId2Sensor, satId2Occupied,
+                                     currentTime, groundStationId, currentSat, stepCount, groundStation);
+    }
+    
     // Main interface - with optional ground station parameter
     virtual cote::Satellite* makeSchedulingDecision(
         const std::vector<cote::Satellite*>& visibleSats,

@@ -10,6 +10,7 @@
 #include "ShortestJobFirstPolicy.hpp"
 #include "ShortestRemainingTimePolicy.hpp"
 #include "StickyPolicy.hpp"
+#include "MinDistancePolicy.hpp"
 #include "MaxDownloadPolicy.hpp"
 #include "MaxDownloadPreemptivePolicy.hpp"
 
@@ -28,6 +29,8 @@ public:
             return std::make_unique<ShortestRemainingTimePolicy>();
         } else if(policyName == "sticky" || policyName == "greedy") {
             return std::make_unique<StickyPolicy>();
+        } else if(policyName == "mindistance" || policyName == "min-distance" || policyName == "mindist" || policyName == "min-dist") {
+            return std::make_unique<MinDistancePolicy>();
         } else if(policyName == "maxdownload" || policyName == "max-download" || policyName == "maxdown" || policyName == "max-down" || policyName == "max_down") {
             return std::make_unique<MaxDownloadPolicy>();
         } else if(policyName == "maxdownloadpreemptive" || policyName == "max-download-preemptive" || policyName == "preemptive") {
@@ -39,3 +42,4 @@ public:
 };
 
 #endif
+

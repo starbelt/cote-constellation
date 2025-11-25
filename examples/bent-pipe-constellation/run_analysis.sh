@@ -2,7 +2,7 @@
 # Flexible Constellation Simulation Pipeline
 # Run any combination of spacing strategies, link policies, satellite counts, and image sizes
 # 
-# Usage: ./run_analysis.sh [policies] [sat_counts] [spacings] [image_sizes]
+# Usage: ./run_analysis.sh [policies] [sat_counts] [spacings] [image_sizes] [results_dir]
 #   All parameters are optional and accept comma-separated lists
 #
 # Examples:
@@ -16,12 +16,14 @@
 #   ./run_analysis.sh fifo "50,100" "close-spaced,orbit-spaced"  # 2×2 combo
 #   ./run_analysis.sh "" 100                             # All policies with 100 sats
 #   ./run_analysis.sh "" "50,100" orbit-spaced           # All policies, 2 sat counts, 1 strategy
+#   ./run_analysis.sh "" "" "" "" results/existing_dir   # Resume incomplete run
 #
 # Valid values (use comma-separated for multiple):
-#   policies:    sticky, fifo, roundrobin, random, maxdownload (or "" for all)
+#   policies:    sticky, fifo, roundrobin, random, mindistance, maxdownload (or "" for all)
 #   sat_counts:  1, 25, 50, 100, 200 (or "" for all)
 #   spacings:    close-spaced, orbit-spaced, frame-spaced, close-orbit-spaced (or "" for all)
 #   image_sizes: 028, 280, 2800, 28000, 280000 (or "" for all)
+#   results_dir: Existing results directory to resume (optional)
 
 set -e  # Exit on any error
 
@@ -32,9 +34,10 @@ PARAM_POLICY=${1:-""}
 PARAM_SAT_COUNT=${2:-""}
 PARAM_SPACING=${3:-""}
 PARAM_IMAGE_SIZE=${4:-""}
+RESUME_DIR=${5:-""}
 
 # Define all possible values
-ALL_POLICIES=("sticky" "fifo" "roundrobin" "random" "maxdownload")
+ALL_POLICIES=("sticky" "fifo" "roundrobin" "random" "mindistance" "maxdownload")
 ALL_SAT_COUNTS=(1 25 50 100 200)
 ALL_SPACING_STRATEGIES=("close-spaced" "close-orbit-spaced" "frame-spaced" "orbit-spaced")
 ALL_IMAGE_SIZES=(028 280 2800 28000 280000 1024000)
@@ -66,12 +69,12 @@ if parse_list "$PARAM_POLICY" "POLICY_LIST"; then
     POLICIES=()
     for policy in "${POLICY_LIST[@]}"; do
         case "$policy" in
-            sticky|fifo|roundrobin|random|maxdownload)
+            sticky|fifo|roundrobin|random|mindistance|maxdownload)
                 POLICIES+=("$policy")
                 ;;
             *)
                 echo "❌ Error: Invalid policy '$policy'"
-                echo "   Valid options: sticky, fifo, roundrobin, random, maxdownload"
+                echo "   Valid options: sticky, fifo, roundrobin, random, mindistance, maxdownload"
                 echo "   Use comma-separated list: fifo,roundrobin,maxdownload"
                 exit 1
                 ;;
@@ -156,6 +159,10 @@ echo "   Spacing Strategies: ${SPACING_STRATEGIES[*]}"
 echo "   Image Sizes: ${IMAGE_SIZES[*]}"
 echo ""
 echo "🎯 Total simulations: ${#POLICIES[@]} policies × ${#SAT_COUNTS[@]} sat counts × ${#SPACING_STRATEGIES[@]} strategies × ${#IMAGE_SIZES[@]} image sizes = $TOTAL_SIMS"
+
+if [ -n "$RESUME_DIR" ]; then
+    echo "📂 Resume mode: Will skip completed simulations in $RESUME_DIR"
+fi
 echo ""
 
 if [ $TOTAL_SIMS -gt 50 ]; then
@@ -172,9 +179,20 @@ fi
 
 cd "$SCRIPT_DIR"
 
-# Create timestamped results directory
-RESULTS_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-RESULTS_DIR="results/maxdownload_${RESULTS_TIMESTAMP}"
+# Create or use results directory
+if [ -n "$RESUME_DIR" ]; then
+  if [ ! -d "$RESUME_DIR" ]; then
+    echo "❌ Error: Resume directory does not exist: $RESUME_DIR"
+    exit 1
+  fi
+  RESULTS_DIR="$RESUME_DIR"
+  echo "📂 Resuming run in: $RESULTS_DIR"
+else
+  RESULTS_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+  RESULTS_DIR="results/maxdownload_${RESULTS_TIMESTAMP}"
+  mkdir -p "$RESULTS_DIR"
+  echo "📂 Created results directory: $RESULTS_DIR"
+fi
 mkdir -p "$RESULTS_DIR"
 
 echo "📂 Results will be saved to: $RESULTS_DIR"
@@ -271,6 +289,14 @@ for IMAGE_SIZE_CODE in "${IMAGE_SIZES[@]}"; do
             
             for policy in "${POLICIES[@]}"; do
                 ((SIMULATION_NUM++))
+                
+                # Check if this simulation already exists (for resume capability)
+                EXPECTED_LOG_FILE="$OUTPUT_DIR/$spacing/simulation_logs.zip"
+                if [ -f "$EXPECTED_LOG_FILE" ]; then
+                    echo ""
+                    echo "[$SIMULATION_NUM/$TOTAL_SIMS] ⏭️  Skipping $spacing with $(echo $policy | tr '[:lower:]' '[:upper:]') policy (already completed)"
+                    continue
+                fi
                 
                 echo ""
                 echo "[$SIMULATION_NUM/$TOTAL_SIMS] 🎯 Running $spacing with $(echo $policy | tr '[:lower:]' '[:upper:]') policy..."

@@ -9,45 +9,56 @@
 #include <Sensor.hpp>
 #include <DateTime.hpp>
 #include <utilities.hpp>
+#include <Channel.hpp>
+#include <Transmitter.hpp>
+#include <Receiver.hpp>
 
 /**
- * MaxDownloadPolicy - Maximum Download Link Scheduling Policy
+ * MaxDownloadPolicy - Smart Maximum Download Link Scheduling Policy
  * 
- * A greedy, space-aware link scheduling policy that maximizes total data downloaded
- * by always connecting to the satellite with the best link (highest bitrate) that has data.
+ * An intelligent link scheduling policy that maximizes actual data downloaded
+ * by considering both link quality (bitrate) AND available buffer data.
  * 
  * Algorithm:
  * 1. Every timestep, evaluate all visible satellites
- * 2. Calculate ground-station to satellite distance for each candidate
- * 3. Sort by distance (ascending - closest first = best link quality)
- * 4. Select the closest satellite that:
- *    - Is not occupied by another ground station
- *    - Has data in its buffer (> 0 bits)
- * 5. Switch immediately if a better link with data becomes available
+ * 2. For each satellite, calculate potential download in next timestep:
+ *    potential_download_MB = min(bitrate_Mbps * 1.0 second, buffer_MB)
+ * 3. Detect operating regime:
+ *    a) Buffer-limited: ALL satellites have buffer < 1 second of capacity
+ *       → Prioritize BITRATE (all buffers drain instantly anyway)
+ *    b) Capacity-limited: Some satellites have sustained buffer
+ *       → Prioritize POTENTIAL DOWNLOAD (balance bitrate vs buffer)
+ * 4. Select best satellite for current regime
+ * 5. Switch immediately if a better download opportunity becomes available
  * 
- * This policy is saturation-aware: if the best satellite has no data,
- * it automatically falls back to the next best satellite with data.
+ * Key Insight - Two Operating Regimes:
+ * 1. Buffer-Limited (small images, < ~1MB):
+ *    All satellites have tiny buffers that drain in << 1 second.
+ *    Strategy: Pick satellite with MOST BUFFER to maximize data downloaded.
+ *    Example: Sat A has 0.06 MB, Sat B has 0.03 MB, both at 120 Mbps
+ *    → Choose Sat A to download 0.06 MB instead of 0.03 MB (2x more data!)
  * 
- * Link Quality Rationale:
- * Shannon capacity: bitrate = BW * log₂(1 + C/N) where C ∝ 1/R²
- * Closer satellite = shorter distance = less free-space path loss = higher C/N = higher bitrate.
- * Therefore, minimum distance guarantees maximum bitrate (verified empirically).
- * Distance accounts for both orbital geometry and ground-station elevation angle.
+ * 2. Capacity-Limited (large images, > ~1MB):
+ *    A satellite with high bitrate but low buffer may download less than
+ *    a satellite with moderate bitrate but full buffer.
+ *    Example:
+ *      Sat A: 100 Mbps, 2 MB buffer  → potential = min(12.5, 2) = 2 MB
+ *      Sat B: 80 Mbps, 300 MB buffer → potential = min(10, 300) = 10 MB
+ *      Decision: Choose Sat B (more actual data downloaded)
  * 
- * Note: Distance is calculated from ground station to satellite (signal path length),
- * which accurately captures link quality. Atmospheric loss is constant in this simulation.
+ * Note: Timestep is 1 second, so bitrate_Mbps directly equals MB/sec download rate.
  */
 class MaxDownloadPolicy : public SchedulingPolicy {
 private:
-    // Helper struct to pair satellite with its link quality metric
-    struct SatDistanceCandidate {
+    // Helper struct to pair satellite with its download potential
+    struct SatDownloadCandidate {
         cote::Satellite* sat;
-        double distanceKm;  // Lower is better (closer = higher bitrate)
+        double potentialDownloadMB;  // Higher is better (actual data we can download)
+        double bitrateMbps;          // For tie-breaking
         uint64_t bufferedBits;
         
-        
-        SatDistanceCandidate(cote::Satellite* s, double dist, uint64_t buf) 
-            : sat(s), distanceKm(dist), bufferedBits(buf) {}
+        SatDownloadCandidate(cote::Satellite* s, double potential, double bitrate, uint64_t buf) 
+            : sat(s), potentialDownloadMB(potential), bitrateMbps(bitrate), bufferedBits(buf) {}
     };
 
 public:
@@ -55,7 +66,7 @@ public:
         return "MaxDownload";
     }
     
-    // Override the 8-parameter version that has ground station
+    // Override the 9-parameter version with bitrate information
     cote::Satellite* makeSchedulingDecision(
         const std::vector<cote::Satellite*>& visibleSats,
         const std::map<uint32_t,cote::Sensor*>& satId2Sensor,
@@ -64,7 +75,8 @@ public:
         uint32_t groundStationId,
         cote::Satellite* currentSat,
         uint64_t stepCount,
-        cote::GroundStation* groundStation
+        cote::GroundStation* groundStation,
+        const std::map<uint32_t,double>& satId2BitrateMbps
     ) override {
         
         // If no satellites visible, disconnect
@@ -72,8 +84,8 @@ public:
             return nullptr;
         }
         
-        // Build list of candidate satellites ranked by distance (lower = better link)
-        std::vector<SatDistanceCandidate> candidates;
+        // Build list of candidate satellites with potential download calculations
+        std::vector<SatDownloadCandidate> candidates;
         
         for(auto* sat : visibleSats) {
             uint32_t satId = sat->getID();
@@ -89,23 +101,26 @@ public:
             // Get buffer status
             uint64_t bufferedBits = satId2Sensor.at(satId)->getBitsBuffered();
             
-            // STRICT MODE: Only consider satellites with data
-            // Skip satellites with empty buffers (even if currently connected)
+            // Skip satellites with empty buffers
             if(bufferedBits == 0) {
                 continue;
             }
             
-            // Calculate ground-station to satellite distance
-            // This is the actual signal path length - lower = better link quality
-            std::array<double,3> satPosn = sat->getECIPosn();
-            std::array<double,3> gndPosn = groundStation->getECIPosn();
+            // Get bitrate for this satellite
+            double bitrateMbps = satId2BitrateMbps.at(satId);
             
-            double dx = satPosn[0] - gndPosn[0];
-            double dy = satPosn[1] - gndPosn[1];
-            double dz = satPosn[2] - gndPosn[2];
-            double distanceKm = std::sqrt(dx*dx + dy*dy + dz*dz);
+            // Calculate potential download in next timestep (1 second)
+            // Bitrate is in Mbps (megabits per second)
+            // Buffer is in bits, convert to MB
+            double bufferMB = (static_cast<double>(bufferedBits) / 8.0) / 1.0e6;
             
-            candidates.emplace_back(sat, distanceKm, bufferedBits);
+            // Download limited by min(bitrate capacity, available buffer)
+            // bitrateMbps * 1.0 second = megabits per second
+            // Convert to MB: megabits / 8 = megabytes
+            double downloadCapacityMB = bitrateMbps / 8.0;  // MB we could download in 1 second
+            double potentialDownloadMB = std::min(downloadCapacityMB, bufferMB);
+            
+            candidates.emplace_back(sat, potentialDownloadMB, bitrateMbps, bufferedBits);
         }
         
         // If no valid candidates, disconnect
@@ -113,23 +128,68 @@ public:
             return nullptr;
         }
         
-        // Sort by distance (ascending - closest first = best link quality)
-        std::sort(candidates.begin(), candidates.end(),
-            [](const SatDistanceCandidate& a, const SatDistanceCandidate& b) {
-                return a.distanceKm < b.distanceKm;  // Lower distance = better
-            });
-        
-        // Return the best candidate (closest distance with data)
-        // In strict mode, all candidates already have data (bufferedBits > 0)
-        if(!candidates.empty()) {
-            return candidates[0].sat;
+        // Check if ALL candidates are buffer-limited (will drain to zero in < 1 second)
+        // In this regime, maximize data downloaded by picking satellite with most buffer
+        bool allBufferLimited = true;
+        for(const auto& c : candidates) {
+            double downloadCapacityMB = c.bitrateMbps / 8.0;  // MB per second
+            double bufferMB = (static_cast<double>(c.bufferedBits) / 8.0) / 1.0e6;
+            if(bufferMB >= downloadCapacityMB) {
+                allBufferLimited = false;
+                break;
+            }
         }
         
-        // No satellites with data available - disconnect
-        return nullptr;
+        // Sort by appropriate metric
+        if(allBufferLimited) {
+            // Buffer-limited regime: ALL satellites will drain completely
+            // Strategy: Pick satellite with MOST data to maximize total downloaded
+            // (since they all drain instantly, get the biggest chunk possible)
+            std::sort(candidates.begin(), candidates.end(),
+                [](const SatDownloadCandidate& a, const SatDownloadCandidate& b) {
+                    // Primary: potential download (more buffer = more data)
+                    if(std::abs(a.potentialDownloadMB - b.potentialDownloadMB) < 0.001) {
+                        // Tie-breaker: prefer higher bitrate (faster drain if buffers equal)
+                        return a.bitrateMbps > b.bitrateMbps;
+                    }
+                    return a.potentialDownloadMB > b.potentialDownloadMB;
+                });
+        } else {
+            // Capacity-limited regime: Some satellites have sustained buffers
+            // Strategy: Balance bitrate and buffer size for sustained throughput
+            std::sort(candidates.begin(), candidates.end(),
+                [](const SatDownloadCandidate& a, const SatDownloadCandidate& b) {
+                    if(std::abs(a.potentialDownloadMB - b.potentialDownloadMB) < 0.001) {
+                        // Tie-breaker: prefer higher bitrate
+                        return a.bitrateMbps > b.bitrateMbps;
+                    }
+                    return a.potentialDownloadMB > b.potentialDownloadMB;  // Higher potential = better
+                });
+        }
+        
+        // Return the best candidate (highest potential download)
+        return candidates[0].sat;
     }
     
-    // Stub for legacy 7-parameter interface (never called since we override 8-param version)
+    // Stub for 8-parameter interface (calls 9-param with empty bitrate map)
+    cote::Satellite* makeSchedulingDecision(
+        const std::vector<cote::Satellite*>& visibleSats,
+        const std::map<uint32_t,cote::Sensor*>& satId2Sensor,
+        const std::map<uint32_t,bool>& satId2Occupied,
+        const cote::DateTime& currentTime,
+        uint32_t groundStationId,
+        cote::Satellite* currentSat,
+        uint64_t stepCount,
+        cote::GroundStation* groundStation
+    ) override {
+        // This should never be called - MaxDownload requires bitrate information
+        std::map<uint32_t,double> emptyBitrates;
+        return makeSchedulingDecision(visibleSats, satId2Sensor, satId2Occupied,
+                                     currentTime, groundStationId, currentSat, stepCount,
+                                     groundStation, emptyBitrates);
+    }
+    
+    // Stub for legacy 7-parameter interface
     cote::Satellite* makeSchedulingDecision(
         const std::vector<cote::Satellite*>& visibleSats,
         const std::map<uint32_t,cote::Sensor*>& satId2Sensor,
@@ -139,8 +199,9 @@ public:
         cote::Satellite* currentSat,
         uint64_t stepCount
     ) override {
-        // This should never be called - MaxDownload requires ground station
+        // This should never be called - MaxDownload requires ground station and bitrate
         return nullptr;
     }
 };
+
 
