@@ -133,15 +133,15 @@ def create_charts(results_df, output_dir):
     
     # Get unique values
     image_sizes = sorted(results_df['image_size_mb'].unique())
-    strategies = ['close-spaced', 'orbit-spaced', 'frame-spaced', 'close-orbit-spaced']
+    strategies = ['close-spaced', 'frame-spaced', 'orbit-spaced', 'close-orbit-spaced']
     policies = ['sticky', 'fifo', 'roundrobin', 'random', 'mindistance', 'maxdownload']
     sat_counts = sorted(results_df['num_sats'].unique())
     
     # Color scheme by STRATEGY (4 distinct colors for stacks)
     strategy_colors = {
         'close-spaced': '#E63946',        # Red
-        'orbit-spaced': '#2E86AB',        # Blue
         'frame-spaced': '#06A77D',        # Green
+        'orbit-spaced': '#2E86AB',        # Blue
         'close-orbit-spaced': '#F77F00'   # Orange
     }
     
@@ -299,8 +299,8 @@ def create_charts(results_df, output_dir):
     print()
     print("  STACKS: Each bar divided by 4 spacing strategies:")
     print("    🔴 Red    = Close-spaced")
-    print("    🔵 Blue   = Orbit-spaced")
-    print("    🟢 Green  = Frame-spaced")
+    print("    � Green  = Frame-spaced")
+    print("    � Blue   = Orbit-spaced")
     print("    🟠 Orange = Close-Orbit-spaced")
     print()
     print(f"  RESULT: {len(image_sizes)} chart(s) (one per image size)")
