@@ -4,7 +4,7 @@
 
 cd "$(dirname "$0")"
 
-TOTAL=256
+TOTAL=720
 CURRENT=0
 GENERATED=0
 FAILED=0
@@ -32,14 +32,19 @@ for analysis_dir in constellation_analysis_*; do
             fi
             
             # Generate for each policy
-            for policy in fifo sticky random roundrobin; do
+            for policy in fifo sticky random roundrobin mindistance maxdownload; do
                 CURRENT=$((CURRENT + 1))
                 
                 # Check if output file already exists (compressed)
-                # Format sat_count as 2-digit number (01, 50, 100, 200)
-                sat_count_padded=$(printf "%02d" "$sat_count")
+                # Format sat_count: 1->01, 25->25, 50->50, 100->100, 200->200
+                # Use %02d for 1-99, keep as-is for 100+
+                if [[ $sat_count -lt 100 ]]; then
+                    sat_count_formatted=$(printf "%02d" "$sat_count")
+                else
+                    sat_count_formatted="$sat_count"
+                fi
                 image_size_padded=$(printf "%05d" "$image_size")
-                output_file="cesium_output/${spacing}_${policy}_${sat_count_padded}sats_${image_size_padded}.czml.gz"
+                output_file="cesium_output/${spacing}_${policy}_${sat_count_formatted}sats_${image_size_padded}.czml.gz"
                 
                 if [[ -f "$output_file" ]]; then
                     echo "[$CURRENT/$TOTAL] $spacing | $policy | ${sat_count} sats | ${image_size} MB"
@@ -49,7 +54,10 @@ for analysis_dir in constellation_analysis_*; do
                 
                 echo "[$CURRENT/$TOTAL] $spacing | $policy | ${sat_count} sats | ${image_size} MB"
                 
-                if python3 generate_single_czml.py "$analysis_dir" "$spacing" "$policy" "$sat_count" > /dev/null 2>&1; then
+                # Run the generation and check if output file was created
+                python3 generate_single_czml.py "$analysis_dir" "$spacing" "$policy" "$sat_count_formatted" > /dev/null 2>&1
+                
+                if [[ -f "$output_file" ]]; then
                     echo "  ✅ Generated"
                     GENERATED=$((GENERATED + 1))
                 else

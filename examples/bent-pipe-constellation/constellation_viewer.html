@@ -20,12 +20,13 @@
             top: 10px;
             left: 10px;
             background: rgba(26, 26, 26, 0.95);
-            padding: 15px;
+            padding: 12px;
             border-radius: 8px;
             color: white;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             z-index: 1000;
-            min-width: 280px;
+            min-width: 220px;
+            max-width: 220px;
         }
         
         #dataPanel {
@@ -149,20 +150,17 @@
         }
         
         #controlPanel h3 {
-            margin: 0 0 15px 0;
-            font-size: 15px;
-            border-bottom: 2px solid #00ff00;
-            padding-bottom: 8px;
+            display: none;
         }
         
         .control-group {
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
         
         .control-group label {
             display: block;
-            margin-bottom: 8px;
-            font-size: 12px;
+            margin-bottom: 6px;
+            font-size: 11px;
             font-weight: bold;
             color: #00ff00;
         }
@@ -263,42 +261,53 @@
         
         <div class="control-group">
             <label>Spacing Strategy:</label>
-            <div class="button-row">
-                <button class="toggle-btn" data-group="spacing" data-value="orbit-spaced">Orbit</button>
-                <button class="toggle-btn active" data-group="spacing" data-value="close-orbit-spaced">Close-Orbit</button>
-                <button class="toggle-btn" data-group="spacing" data-value="close-spaced">Close</button>
-                <button class="toggle-btn" data-group="spacing" data-value="frame-spaced">Frame</button>
-            </div>
+            <select id="spacingSelect" style="width: 100%; padding: 8px; background: rgba(50, 50, 50, 0.8); color: white; border: 1px solid #444; border-radius: 4px; font-size: 11px;">
+                <option value="orbit-spaced">Orbit Spaced</option>
+                <option value="close-orbit-spaced" selected>Close-Orbit Spaced</option>
+                <option value="close-spaced">Close Spaced</option>
+                <option value="frame-spaced">Frame Spaced</option>
+            </select>
         </div>
         
         <div class="control-group">
             <label>Link Policy:</label>
-            <div class="button-row">
-                <button class="toggle-btn active" data-group="policy" data-value="sticky">Sticky</button>
-                <button class="toggle-btn" data-group="policy" data-value="fifo">FIFO</button>
-                <button class="toggle-btn" data-group="policy" data-value="random">Random</button>
-                <button class="toggle-btn" data-group="policy" data-value="roundrobin">RoundRobin</button>
-            </div>
-        </div>
-        
-        <div class="control-group">
-            <label>Image Size:</label>
-            <div class="button-row">
-                <button class="toggle-btn" data-group="imagesize" data-value="0">0.03 MB</button>
-                <button class="toggle-btn" data-group="imagesize" data-value="1">0.3 MB</button>
-                <button class="toggle-btn" data-group="imagesize" data-value="2">3 MB</button>
-                <button class="toggle-btn active" data-group="imagesize" data-value="3">30 MB</button>
-            </div>
+            <select id="policySelect" style="width: 100%; padding: 8px; background: rgba(50, 50, 50, 0.8); color: white; border: 1px solid #444; border-radius: 4px; font-size: 11px;">
+                <option value="sticky" selected>Sticky</option>
+                <option value="fifo">FIFO</option>
+                <option value="random">Random</option>
+                <option value="roundrobin">Round Robin</option>
+                <option value="mindistance">Min Distance</option>
+                <option value="maxdownload">Max Download</option>
+            </select>
         </div>
         
         <div class="control-group">
             <label>Constellation Size:</label>
-            <div class="button-row">
-                <button class="toggle-btn" data-group="size" data-value="01">1</button>
-                <button class="toggle-btn" data-group="size" data-value="50">50</button>
-                <button class="toggle-btn" data-group="size" data-value="100">100</button>
-                <button class="toggle-btn active" data-group="size" data-value="200">200</button>
-            </div>
+            <select id="sizeSelect" style="width: 100%; padding: 8px; background: rgba(50, 50, 50, 0.8); color: white; border: 1px solid #444; border-radius: 4px; font-size: 11px;">
+                <option value="01">1 Satellite</option>
+                <option value="25">25 Satellites</option>
+                <option value="50">50 Satellites</option>
+                <option value="100">100 Satellites</option>
+                <option value="200" selected>200 Satellites</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label>Image Size:</label>
+            <select id="imagesizeSelect" style="width: 100%; padding: 8px; background: rgba(50, 50, 50, 0.8); color: white; border: 1px solid #444; border-radius: 4px; font-size: 11px;">
+                <option value="0">27 KB</option>
+                <option value="1">279 KB</option>
+                <option value="2">2.8 MB</option>
+                <option value="3" selected>28 MB</option>
+                <option value="4">280 MB</option>
+                <option value="5">1 GB</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <button onclick="loadCZML()" style="width: 100%; padding: 12px; background: #00ff00; color: #000; border: none; border-radius: 4px; font-size: 13px; font-weight: bold; cursor: pointer; transition: all 0.2s;">
+                Load Visualization
+            </button>
         </div>
         
         <div class="control-group">
@@ -325,6 +334,7 @@
     </div>
     
     <script>
+        console.log('Script loading - START');
         Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI4ZjgyZTc0NS1hOWNmLTQxYmYtODhmMS02OTU1ZGNhZDA1MTgiLCJpZCI6MzU3NjA5LCJpYXQiOjE3NjIzOTE0Mjd9.9kVa3Qr5pSonJdf9-XgSPnRy37JF_uopibsv4FcPB5U';
         // Initialize Cesium viewer (following CASMA demo approach)
         const viewer = new Cesium.Viewer('cesiumContainer', {
@@ -467,22 +477,21 @@
         let queueListenerSetup = false; // Track if listener is already set up
         let debugCount = 0;
         
-        // Current selection state
-        let currentSelection = {
-            spacing: 'close-orbit-spaced',
-            policy: 'sticky',
-            imagesizeIndex: 3,  // Start with 30MB (index 3)
-            size: '200'
-        };
-        
         // Load CZML function
         async function loadCZML() {
+            console.log('loadCZML function called!');
+            // Get values from dropdowns
+            const spacing = document.getElementById('spacingSelect').value;
+            const policy = document.getElementById('policySelect').value;
+            const size = document.getElementById('sizeSelect').value;
+            const imagesizeIndex = parseInt(document.getElementById('imagesizeSelect').value);
+            
             // Map imagesize index to zero-padded image size codes
-            const imageSizeCodes = ['00027', '00279', '02799', '28000'];
-            const imageSizeCode = imageSizeCodes[currentSelection.imagesizeIndex];
+            const imageSizeCodes = ['00027', '00279', '02799', '28000', '280000', '1024000'];
+            const imageSizeCode = imageSizeCodes[imagesizeIndex];
             
             // Dynamically construct filename: {spacing}_{policy}_{size}sats_{imagesize}.czml.gz
-            const filename = `${currentSelection.spacing}_${currentSelection.policy}_${currentSelection.size}sats_${imageSizeCode}.czml.gz`;
+            const filename = `cesium_output/${spacing}_${policy}_${size}sats_${imageSizeCode}.czml.gz`;
             
             console.log('Loading compressed CZML:', filename);
             
@@ -519,7 +528,7 @@
                 
                 // Update queue title based on policy
                 const queueTitle = document.getElementById('queueTitle');
-                queueTitle.textContent = `${currentSelection.policy.toUpperCase()} QUEUE`;
+                queueTitle.textContent = `${policy.toUpperCase()} QUEUE`;
                 
                 // Set clock to CZML data timespan (2025-01-01)
                 const start = Cesium.JulianDate.fromIso8601('2025-01-01T00:00:00Z');
@@ -537,13 +546,12 @@
                 });
                 
                 // Update info display
-                const spacingLabel = currentSelection.spacing.replace(/-/g, ' ');
+                const spacingLabel = spacing.replace(/-/g, ' ');
+                const imageSizeLabels = ['27 KB', '279 KB', '2.8 MB', '28 MB', '280 MB', '1 GB'];
                 document.getElementById('currentConfig').textContent = 
-                    `${spacingLabel} | ${currentSelection.policy} | ${currentSelection.size} sats`;
+                    `${spacingLabel} | ${policy} | ${size} sats | ${imageSizeLabels[imagesizeIndex]}`;
                 document.getElementById('status').textContent = 'Active';
                 document.getElementById('status').style.color = '#00ff00';
-                
-                // Set up queue listener (only once)
                 if (!queueListenerSetup) {
                     queueListenerSetup = true;
                     
@@ -705,43 +713,15 @@
         }
         
         // Toggle connection info display (elevation and distance)
+        // Toggle connection info display (elevation and distance)
         function toggleConnectionInfo() {
             // The queue display will automatically update on next tick
             // No need to force update here, it will refresh within 1 second
         }
         
-        // Toggle button functionality
-        document.querySelectorAll('.toggle-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                if (this.disabled) return;
-                
-                const group = this.dataset.group;
-                const value = this.dataset.value;
-                
-                // Remove active from all buttons in this group
-                document.querySelectorAll(`[data-group="${group}"]`).forEach(b => {
-                    b.classList.remove('active');
-                });
-                
-                // Set this button as active
-                this.classList.add('active');
-                
-                // Update current selection
-                if (group === 'imagesize') {
-                    // Convert imagesize button value to index (0-3)
-                    currentSelection.imagesizeIndex = parseInt(value);
-                } else {
-                    currentSelection[group] = value;
-                }
-                
-                // Load new visualization
-                loadCZML();
-            });
-        });
-        
-        // Initial active buttons are already set in HTML
-        // Load initial visualization (onTick listener will be set up after CZML loads)
-        loadCZML();
+        // Don't auto-load on page load - wait for user to click "Load Visualization"
+        // loadCZML();
+        console.log('Script loading - END. loadCZML defined:', typeof loadCZML);
     </script>
 </body>
 </html>
