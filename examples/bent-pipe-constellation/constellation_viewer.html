@@ -430,6 +430,13 @@
         // Set clock to 1x real-time speed (not 60x)
         viewer.clock.multiplier = 1;
         
+        // Make mouse wheel zoom more granular (default is ~10%, reduce to ~2%)
+        viewer.scene.screenSpaceCameraController.zoomEventTypes = [
+            Cesium.CameraEventType.WHEEL,
+            Cesium.CameraEventType.PINCH
+        ];
+        viewer.scene.screenSpaceCameraController.wheelZoomAmount = 0.02; // Much finer zoom control
+        
         // Note: CZML filenames are now dynamically constructed based on selections
         // Format: {spacing}_{policy}_{size}sats_{imagesize}.czml
         // Where imagesize is one of: 00027, 00279, 02799, 28000
