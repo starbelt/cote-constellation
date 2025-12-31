@@ -29,6 +29,12 @@
             max-width: 220px;
         }
         
+        #controlPanel.collapsed {
+            min-width: 180px;
+            max-width: 180px;
+            padding: 8px 12px;
+        }
+        
         #dataPanel {
             position: absolute;
             top: 10px;
@@ -42,6 +48,12 @@
             min-width: 200px;
             max-width: 250px;
             border: 1px solid #00ff00;
+        }
+        
+        #dataPanel.collapsed {
+            min-width: 120px;
+            max-width: 120px;
+            padding: 8px 12px;
         }
         
         #dataPanel h3 {
@@ -156,19 +168,44 @@
         .hide-btn {
             position: absolute;
             top: 5px;
+            right: 28px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            cursor: pointer;
+            padding: 2px 8px;
+            font-size: 14px;
+            border-radius: 3px;
+            transition: all 0.2s;
+            line-height: 1;
+        }
+        
+        .hide-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .close-panel-btn {
+            position: absolute;
+            top: 5px;
             right: 5px;
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.3);
             color: white;
             cursor: pointer;
             padding: 2px 6px;
-            font-size: 10px;
+            font-size: 14px;
             border-radius: 3px;
             transition: all 0.2s;
+            line-height: 1;
         }
         
-        .hide-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
+        .close-panel-btn:hover {
+            background: rgba(255, 0, 0, 0.3);
+            color: #ff6666;
+        }
+        
+        .panel-content.hidden {
+            display: none;
         }
         
         .control-group {
@@ -262,9 +299,10 @@
     <div id="loadingIndicator">Loading...</div>
     
     <div id="dataPanel">
-        <button class="hide-btn" onclick="document.getElementById('dataPanel').style.display='none'">Hide</button>
+        <button class="hide-btn" onclick="togglePanel('dataPanel')">─</button>
+        <button class="close-panel-btn" onclick="document.getElementById('dataPanel').style.display='none'">×</button>
         <h3 id="queueTitle">QUEUE</h3>
-        <div id="queueContainer" class="queue-container">
+        <div id="queueContainer" class="queue-container panel-content">
             <div class="queue-empty">No satellites in view</div>
         </div>
     </div>
@@ -276,8 +314,10 @@
     </div>
     
     <div id="controlPanel">
-        <button class="hide-btn" onclick="document.getElementById('controlPanel').style.display='none'">Hide</button>
+        <button class="hide-btn" onclick="togglePanel('controlPanel')">─</button>
+        <button class="close-panel-btn" onclick="document.getElementById('controlPanel').style.display='none'">×</button>
         <h3>🛰️ Constellation Viewer</h3>
+        <div class="panel-content">
         
         <div class="control-group">
             <label>Spacing Strategy:</label>
@@ -350,12 +390,19 @@
                     <span>Show Lines</span>
                 </label>
             </div>
+            <div class="button-row" style="margin-top: 8px;">
+                <label style="color: white; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="toggleConnDots" checked onchange="toggleConnectedDots()" style="width: 18px; height: 18px; cursor: pointer;">
+                    <span>Show Green Dots</span>
+                </label>
+            </div>
         </div>
         
         <div id="infoDisplay">
             <div><span class="label-text">Config:</span> <span class="value-text" id="currentConfig">-</span></div>
             <div><span class="label-text">Ground Station:</span> <span class="value-text">Svalbard</span></div>
             <div><span class="label-text">Status:</span> <span class="value-text" id="status">Ready</span></div>
+        </div>
         </div>
     </div>
     
@@ -502,6 +549,7 @@
         let currentDataSource = null;
         let queueListenerSetup = false; // Track if listener is already set up
         let debugCount = 0;
+        let originalPolylineShows = new Map(); // Store original polyline show properties
         
         // Load CZML function
         async function loadCZML() {
@@ -704,12 +752,39 @@
                     });
                 }
                 
+                // Store original polyline show properties for proper restoration
+                originalPolylineShows.clear();
+                const entities = currentDataSource.entities.values;
+                for (let i = 0; i < entities.length; i++) {
+                    const entity = entities[i];
+                    if (entity.polyline) {
+                        // Store the original show property (which may be time-dynamic from CZML)
+                        originalPolylineShows.set(entity.id, entity.polyline.show);
+                    }
+                }
+                
             } catch (error) {
                 console.error('Error loading CZML:', error);
                 document.getElementById('status').textContent = 'Error';
                 document.getElementById('status').style.color = '#ff0000';
             } finally {
                 document.getElementById('loadingIndicator').style.display = 'none';
+            }
+        }
+        
+        // Toggle panel minimize/expand
+        function togglePanel(panelId) {
+            const panel = document.getElementById(panelId);
+            const content = panel.querySelector('.panel-content');
+            const btn = panel.querySelector('.hide-btn');
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                panel.classList.remove('collapsed');
+                btn.textContent = '─';
+            } else {
+                content.classList.add('hidden');
+                panel.classList.add('collapsed');
+                btn.textContent = '☐';
             }
         }
         
@@ -752,7 +827,36 @@
                 for (let i = 0; i < entities.length; i++) {
                     const entity = entities[i];
                     if (entity.polyline) {
-                        entity.polyline.show = showLines;
+                        if (showLines) {
+                            // Restore the original show property from our stored map
+                            const originalShow = originalPolylineShows.get(entity.id);
+                            if (originalShow) {
+                                entity.polyline.show = originalShow;
+                            }
+                        } else {
+                            // Hide completely
+                            entity.polyline.show = false;
+                        }
+                    }
+                }
+            }
+        }
+        
+        function toggleConnectedDots() {
+            const showDots = document.getElementById('toggleConnDots').checked;
+            if (currentDataSource) {
+                const entities = currentDataSource.entities.values;
+                const currentTime = viewer.clock.currentTime;
+                for (let i = 0; i < entities.length; i++) {
+                    const entity = entities[i];
+                    if (entity.id.startsWith('sat_') && entity.point && entity.properties) {
+                        const isConnected = entity.properties.is_connected;
+                        if (isConnected) {
+                            const connectedValue = isConnected.getValue(currentTime);
+                            if (connectedValue) {
+                                entity.point.show = showDots;
+                            }
+                        }
                     }
                 }
             }
