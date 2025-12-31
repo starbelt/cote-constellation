@@ -398,6 +398,10 @@
             </div>
         </div>
         
+        <div class="control-group">
+            <button onclick="resetView()" style="width: 100%; padding: 8px; background: rgba(0, 150, 255, 0.3); border: 1px solid rgba(0, 150, 255, 0.6); color: white; cursor: pointer; border-radius: 4px; font-size: 12px; transition: all 0.2s;">Reset View</button>
+        </div>
+        
         <div id="infoDisplay">
             <div><span class="label-text">Config:</span> <span class="value-text" id="currentConfig">-</span></div>
             <div><span class="label-text">Ground Station:</span> <span class="value-text">Svalbard</span></div>
@@ -786,6 +790,32 @@
                 panel.classList.add('collapsed');
                 btn.textContent = '☐';
             }
+        }
+        
+        // Reset view - restore panels and camera position
+        function resetView() {
+            // Show both panels if hidden
+            document.getElementById('controlPanel').style.display = 'block';
+            document.getElementById('dataPanel').style.display = 'block';
+            
+            // Expand both panels if collapsed
+            const panels = ['controlPanel', 'dataPanel'];
+            panels.forEach(panelId => {
+                const panel = document.getElementById(panelId);
+                const content = panel.querySelector('.panel-content');
+                const btn = panel.querySelector('.hide-btn');
+                if (content.classList.contains('hidden')) {
+                    content.classList.remove('hidden');
+                    panel.classList.remove('collapsed');
+                    btn.textContent = '─';
+                }
+            });
+            
+            // Reset camera to default view
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(15.3906, 65.0, 12000000),
+                duration: 1.0
+            });
         }
         
         // Toggle satellite labels visibility
