@@ -153,6 +153,24 @@
             display: none;
         }
         
+        .hide-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            cursor: pointer;
+            padding: 2px 6px;
+            font-size: 10px;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+        
+        .hide-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
         .control-group {
             margin-bottom: 12px;
         }
@@ -244,6 +262,7 @@
     <div id="loadingIndicator">Loading...</div>
     
     <div id="dataPanel">
+        <button class="hide-btn" onclick="document.getElementById('dataPanel').style.display='none'">Hide</button>
         <h3 id="queueTitle">QUEUE</h3>
         <div id="queueContainer" class="queue-container">
             <div class="queue-empty">No satellites in view</div>
@@ -257,6 +276,7 @@
     </div>
     
     <div id="controlPanel">
+        <button class="hide-btn" onclick="document.getElementById('controlPanel').style.display='none'">Hide</button>
         <h3>🛰️ Constellation Viewer</h3>
         
         <div class="control-group">
@@ -322,6 +342,12 @@
                 <label style="color: white; display: flex; align-items: center; gap: 8px; cursor: pointer;">
                     <input type="checkbox" id="toggleConnInfo" checked onchange="toggleConnectionInfo()" style="width: 18px; height: 18px; cursor: pointer;">
                     <span>Show Connected Sat Info</span>
+                </label>
+            </div>
+            <div class="button-row" style="margin-top: 8px;">
+                <label style="color: white; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="toggleLines" checked onchange="toggleConnectionLines()" style="width: 18px; height: 18px; cursor: pointer;">
+                    <span>Show Lines</span>
                 </label>
             </div>
         </div>
@@ -717,6 +743,19 @@
         function toggleConnectionInfo() {
             // The queue display will automatically update on next tick
             // No need to force update here, it will refresh within 1 second
+        }
+        
+        function toggleConnectionLines() {
+            const showLines = document.getElementById('toggleLines').checked;
+            if (currentDataSource) {
+                const entities = currentDataSource.entities.values;
+                for (let i = 0; i < entities.length; i++) {
+                    const entity = entities[i];
+                    if (entity.polyline) {
+                        entity.polyline.show = showLines;
+                    }
+                }
+            }
         }
         
         // Don't auto-load on page load - wait for user to click "Load Visualization"
