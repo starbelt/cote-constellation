@@ -399,7 +399,8 @@
         </div>
         
         <div class="control-group">
-            <button onclick="resetView()" style="width: 100%; padding: 8px; background: rgba(0, 150, 255, 0.3); border: 1px solid rgba(0, 150, 255, 0.6); color: white; cursor: pointer; border-radius: 4px; font-size: 12px; transition: all 0.2s;">Reset View</button>
+            <button onclick="resetView()" style="width: 100%; padding: 8px; background: rgba(0, 150, 255, 0.3); border: 1px solid rgba(0, 150, 255, 0.6); color: white; cursor: pointer; border-radius: 4px; font-size: 12px; transition: all 0.2s; margin-bottom: 6px;">Reset View</button>
+            <button onclick="zoomToLeadSat()" style="width: 100%; padding: 8px; background: rgba(0, 255, 100, 0.3); border: 1px solid rgba(0, 255, 100, 0.6); color: white; cursor: pointer; border-radius: 4px; font-size: 12px; transition: all 0.2s;">Zoom to Lead Sat</button>
         </div>
         
         <div id="infoDisplay">
@@ -816,6 +817,70 @@
                 destination: Cesium.Cartesian3.fromDegrees(15.3906, 65.0, 12000000),
                 duration: 1.0
             });
+        }
+        
+        // Snap to lead satellite (first in queue) keeping current zoom level
+        function zoomToLeadSat() {
+            if (!currentDataSource) {
+                alert('Please load a visualization first');
+                return;
+            }
+            
+            // Find first satellite with buffer data
+            const entities = currentDataSource.entities.values;
+            const currentTime = viewer.clock.currentTime;
+            
+            for (let i = 0; i < entities.length; i++) {
+                const entity = entities[i];
+                if (entity.id.startsWith('sat_')) {
+                    try {
+                        const position = entity.position.getValue(currentTime);
+                        if (position) {
+                            // Get current camera distance from target
+                            const currentDistance = Cesium.Cartesian3.distance(
+                                viewer.camera.position,
+                                viewer.camera.positionCartographic ? 
+                                    Cesium.Cartesian3.fromRadians(
+                                        viewer.camera.positionCartographic.longitude,
+                                        viewer.camera.positionCartographic.latitude,
+                                        0
+                                    ) : position
+                            );
+                            
+                            // Calculate offset to maintain current zoom level
+                            const cameraDirection = Cesium.Cartesian3.normalize(
+                                Cesium.Cartesian3.subtract(viewer.camera.position, position, new Cesium.Cartesian3()),
+                                new Cesium.Cartesian3()
+                            );
+                            const offset = Cesium.Cartesian3.multiplyByScalar(
+                                cameraDirection,
+                                currentDistance,
+                                new Cesium.Cartesian3()
+                            );
+                            const newCameraPosition = Cesium.Cartesian3.add(
+                                position,
+                                offset,
+                                new Cesium.Cartesian3()
+                            );
+                            
+                            // Snap to satellite position keeping zoom level
+                            viewer.camera.flyTo({
+                                destination: newCameraPosition,
+                                orientation: {
+                                    direction: Cesium.Cartesian3.negate(cameraDirection, new Cesium.Cartesian3()),
+                                    up: viewer.camera.up
+                                },
+                                duration: 0.5
+                            });
+                            return;
+                        }
+                    } catch (e) {
+                        continue;
+                    }
+                }
+            }
+            
+            alert('No satellite found to snap to');
         }
         
         // Toggle satellite labels visibility
