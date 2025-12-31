@@ -430,12 +430,32 @@
         // Set clock to 1x real-time speed (not 60x)
         viewer.clock.multiplier = 1;
         
-        // Make mouse wheel zoom more granular (default is ~10%, reduce to ~2%)
-        viewer.scene.screenSpaceCameraController.zoomEventTypes = [
-            Cesium.CameraEventType.WHEEL,
-            Cesium.CameraEventType.PINCH
-        ];
-        viewer.scene.screenSpaceCameraController.wheelZoomAmount = 0.02; // Much finer zoom control
+        // Make mouse wheel zoom more granular (smaller steps)
+        const controller = viewer.scene.screenSpaceCameraController;
+        controller.minimumZoomDistance = 100; // Allow zooming closer
+        controller.maximumZoomDistance = 50000000; // Max zoom out distance
+        
+        // Reduce zoom sensitivity for finer control
+        const originalZoomFactor = controller.zoomEventTypes;
+        viewer.camera.defaultZoomAmount = 1000; // Much smaller zoom increment
+        
+        // Override zoom behavior for mouse wheel
+        viewer.scene.canvas.addEventListener('wheel', function(event) {
+            event.preventDefault();
+            const cameraHeight = viewer.camera.positionCartographic.height;
+            const moveRate = cameraHeight / 50.0; // Fine-grained zoom (was /10.0 by default)
+            
+            if (event.deltaY < 0) {
+                // Zoom in
+                viewer.camera.moveForward(moveRate);
+            } else {
+                // Zoom out
+                viewer.camera.moveBackward(moveRate);
+            }
+        }, { passive: false });
+        
+        // Disable default zoom to use custom handler
+        controller.enableZoom = false;
         
         // Note: CZML filenames are now dynamically constructed based on selections
         // Format: {spacing}_{policy}_{size}sats_{imagesize}.czml
