@@ -23,6 +23,13 @@ public:
         const size_t satCount = satellites.size();
         std::cout << "close-orbit-spaced: " << satCount << " satellites" << std::endl;
         
+        // For satellite counts < 25: No clustering, use constellation.dat spacing
+        // This means close-orbit-spaced behaves identically to orbit-spaced for small constellations
+        if (satCount < 25) {
+            std::cout << "  → " << satCount << " sats: no clustering (uses constellation.dat)" << std::endl;
+            return;
+        }
+        
         // 25 sats: No clustering (baseline complete)
         if (satCount == 25) {
             std::cout << "  → 25 sats: baseline (no clustering)" << std::endl;
