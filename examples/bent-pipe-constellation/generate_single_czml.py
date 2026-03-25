@@ -1,15 +1,39 @@
 #!/usr/bin/env python3
 """
-Generate a single CZML file for testing
+Generate a compressed CZML file from CoTE simulation output.
+
+Converts a visibility_log.csv (from a CoTE bent-pipe constellation run)
+into a CesiumJS-compatible CZML file that can be loaded by
+constellation_viewer.html.
+
+Usage:
+    python generate_single_czml.py <analysis_dir> <spacing> <policy> <sat_count>
+
+Example:
+    python generate_single_czml.py \
+        constellation_analysis_20260228_120438_02799_25 \
+        close-spaced fifo 25
+
+The script:
+  1. Extracts the requested policy from simulation_logs.zip
+  2. Reads visibility_log.csv (limited to first hour for visualization)
+  3. Generates CZML with satellite tracks, ground station, connection lines,
+     color-coded state, and per-satellite custom properties
+  4. Writes a gzip-compressed .czml.gz to cesium_output/
+  5. Cleans up any extracted files
+
+Output: cesium_output/{spacing}_{policy}_{size}sats_{imagesize}.czml.gz
 """
-import pandas as pd
+
 import json
-from pathlib import Path
-from datetime import datetime, timedelta
 import sys
 import zipfile
 import shutil
 import gzip
+from pathlib import Path
+from datetime import datetime, timedelta
+
+import pandas as pd
 
 def generate_single_czml(size, analysis_dir, spacing, policy):
     """Generate CZML for a single configuration"""
@@ -33,21 +57,21 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
     
     # If visibility_log doesn't exist but zip does, extract ONLY the needed policy
     if not vis_log_path.exists() and zip_file.exists():
-        print(f"📦 Extracting {policy}/ from {zip_file.name}...")
+        print(f"Extracting {policy}/ from {zip_file.name}...")
         with zipfile.ZipFile(zip_file, 'r') as zip_ref:
             # Extract only files from the specific policy directory
             policy_members = [m for m in zip_ref.namelist() if m.startswith(f"{policy}/")]
             if policy_members:
                 zip_ref.extractall(spacing_dir, members=policy_members)
                 extracted = True
-                print(f"✅ Extracted {len(policy_members)} files to {spacing_dir}/{policy}")
+                print(f"Extracted {len(policy_members)} files to {spacing_dir}/{policy}")
             else:
-                print(f"❌ Policy '{policy}' not found in zip")
+                print(f"Error: Policy '{policy}' not found in zip")
                 return None
     
     # Load visibility log
     if not vis_log_path.exists():
-        print(f"❌ File not found: {vis_log_path}")
+        print(f"Error: File not found: {vis_log_path}")
         return None
     
     df = pd.read_csv(vis_log_path)
@@ -429,11 +453,11 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
         json.dump(czml, f)
     
     file_size = output_file.stat().st_size / (1024 * 1024)
-    print(f"\n✅ Generated: {output_file.name}")
+    print(f"\nGenerated: {output_file.name}")
     print(f"   File size: {file_size:.2f} MB")
     
     # Compress the CZML file
-    print(f"🗜️  Compressing to .gz...")
+    print(f"Compressing to .gz...")
     output_gz = output_file.with_suffix('.czml.gz')
     with open(output_file, 'rb') as f_in:
         with gzip.open(output_gz, 'wb') as f_out:
@@ -447,32 +471,36 @@ def generate_single_czml(size, analysis_dir, spacing, policy):
     
     # Cleanup: remove extracted directory if we extracted it
     if extracted and policy_dir.exists():
-        print(f"🧹 Cleaning up {policy_dir}...")
+        print(f"Cleaning up {policy_dir}...")
         shutil.rmtree(policy_dir)
-        print(f"✅ Cleanup complete")
+        print(f"Cleanup complete")
     
     return str(output_gz)
 
 
 if __name__ == "__main__":
-    import sys
-    
-    if len(sys.argv) >= 5:
-        # Command line arguments: analysis_dir spacing policy size
-        analysis_dir = sys.argv[1]
-        spacing = sys.argv[2]
-        policy = sys.argv[3]
-        size = sys.argv[4]
-    else:
-        # Test with orbit-spaced, fifo, 100 sats, 02799 MB image
-        size = "100"
-        analysis_dir = "constellation_analysis_20251022_201325_02799_100"
-        spacing = "orbit-spaced"
-        policy = "fifo"
-    
+    if len(sys.argv) < 5:
+        print("Usage: python generate_single_czml.py <analysis_dir> <spacing> <policy> <sat_count>")
+        print()
+        print("  analysis_dir  Directory name under results/ (e.g. constellation_analysis_20260228_120438_02799_25)")
+        print("  spacing       One of: close-spaced, close-orbit-spaced, frame-spaced, orbit-spaced")
+        print("  policy        Link policy (e.g. fifo, roundrobin, maxdownload, geobin, ...)")
+        print("  sat_count     Number of satellites (e.g. 25, 200)")
+        print()
+        print("Example:")
+        print("  python generate_single_czml.py \\")
+        print("      constellation_analysis_20260228_120438_02799_25 \\")
+        print("      close-spaced fifo 25")
+        sys.exit(1)
+
+    analysis_dir = sys.argv[1]
+    spacing = sys.argv[2]
+    policy = sys.argv[3]
+    size = sys.argv[4]
+
     filename = generate_single_czml(size, analysis_dir, spacing, policy)
     if filename:
-        print(f"\n✅ Success! File: {filename}")
+        print(f"\nSuccess: {filename}")
     else:
-        print(f"\n❌ Failed to generate CZML")
+        print("\nFailed to generate CZML")
         sys.exit(1)

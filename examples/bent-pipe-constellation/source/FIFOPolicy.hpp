@@ -28,7 +28,6 @@ public:
         uint64_t stepCount
     ) override {
         
-        // FIFO: Stick with current satellite until it's done or out of view
         if(currentSat != nullptr) {
             bool currentSatVisible = false;
             for(const auto* sat : visibleSats) {
@@ -38,56 +37,45 @@ public:
                 }
             }
             
-            // Check if current satellite still has data
             if(currentSatVisible) {
                 const uint64_t currentBuf = satId2Sensor.at(currentSat->getID())->getBitsBuffered();
                 if(currentBuf > 0) {
-                    // Continue with current satellite - it's still visible and has data
                     return currentSat;
                 }
             }
-            // If we reach here, current satellite is either out of view or done with data
         }
         
-        // Get queue for this ground station
         auto& satQueue = gndId2SatQueue[groundStationId];
         
-        // Create set of visible satellite IDs for efficient lookup
         std::set<uint32_t> visibleSatIds;
         for(const auto* sat : visibleSats) {
             visibleSatIds.insert(sat->getID());
         }
         
-        // Create set of current queue IDs for efficient duplicate checking
         std::set<uint32_t> queuedSatIds;
         for(const auto& queuedId : satQueue) {
             queuedSatIds.insert(queuedId);
         }
         
-        // Add new visible satellites to back of queue
         for(const auto* sat : visibleSats) {
             uint32_t satId = sat->getID();
             
-            // Only add if not already in queue (O(1) lookup)
             if(queuedSatIds.find(satId) == queuedSatIds.end()) {
-                satQueue.push_back(satId);  // Add to back (FIFO order)
-                queuedSatIds.insert(satId); // Track for efficiency
+                satQueue.push_back(satId);
+                queuedSatIds.insert(satId);
             }
         }
         
-        // Process queue from front, removing invalid entries
         while(!satQueue.empty()) {
             uint32_t frontSatId = satQueue.front();
             satQueue.pop_front();
             
-            // Skip if satellite is no longer visible
             if(visibleSatIds.find(frontSatId) == visibleSatIds.end()) {
-                continue;  // Remove from queue and try next
+                continue;
             }
             
-            // Skip if satellite is occupied by another ground station
             if(satId2Occupied.count(frontSatId) && satId2Occupied.at(frontSatId)) {
-                continue;  // Remove from queue and try next
+                continue;
             }
             
             // Find the satellite object and check if it has data
@@ -97,7 +85,7 @@ public:
                     if(buffered > 0) {
                         return const_cast<cote::Satellite*>(sat);
                     }
-                    break;  // Found satellite but no data, continue to next
+                    break;
                 }
             }
         }

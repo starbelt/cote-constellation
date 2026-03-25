@@ -10,6 +10,8 @@ CMakeLists.txt
 
 # Python
 p3-env/
+__pycache__/
+*.pyc
 
 # macOS
 .DS_Store
@@ -22,7 +24,8 @@ p3-env/
 *.zip
 simulation_summary.txt
 temp*
-constellation_analysis_*
+constellation_analysis/
+analysis_output/
 
 # Executables
 bent_pipe
@@ -58,4 +61,5 @@ capture_and_downlink
 CASMA-Cesium-Demo/
 *.czml.gz
 examples/bent-pipe-constellation/results
+examples/bent-pipe-constellation/research_output
 *.log

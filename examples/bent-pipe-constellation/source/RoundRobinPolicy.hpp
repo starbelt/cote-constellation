@@ -13,6 +13,7 @@ class RoundRobinPolicy : public SchedulingPolicy {
 private:
     mutable std::map<uint32_t, std::queue<uint32_t>> gndId2SatQueue;
     mutable std::map<uint32_t, std::set<uint32_t>> gndId2SatInQueue;
+    mutable std::map<uint32_t, uint64_t> gndId2ConnectStep;
     
 public:
     std::string getPolicyName() override {
@@ -29,7 +30,6 @@ public:
         uint64_t stepCount
     ) override {
         
-        // If we have a current satellite, check if we should continue with it
         if(currentSat != NULL) {
             bool currentSatVisible = false;
             for(const auto* sat : visibleSats) {
@@ -39,17 +39,23 @@ public:
                 }
             }
             
-            // Round Robin: continue with current satellite if visible AND has data
+            // Continue with current satellite if visible, has data, and under 30s
             if(currentSatVisible) {
                 const uint64_t currentBuf = satId2Sensor.at(currentSat->getID())->getBitsBuffered();
-                if(currentBuf > 0) {
-                    return currentSat; // Continue with current satellite
+                const uint64_t elapsed = stepCount - gndId2ConnectStep[groundStationId];
+                if(currentBuf > 0 && elapsed < 30) {
+                    return currentSat;
                 }
-                // If buffer is 0, fall through to find next satellite
+                if(currentBuf > 0) {
+                    uint32_t curId = currentSat->getID();
+                    if(gndId2SatInQueue[groundStationId].find(curId) == gndId2SatInQueue[groundStationId].end()) {
+                        gndId2SatQueue[groundStationId].push(curId);
+                        gndId2SatInQueue[groundStationId].insert(curId);
+                    }
+                }
             }
         }
         
-        // Add new visible satellites to the queue
         for(const auto* sat : visibleSats) {
             uint32_t satId = sat->getID();
             if(gndId2SatInQueue[groundStationId].find(satId) == gndId2SatInQueue[groundStationId].end()) {
@@ -58,7 +64,7 @@ public:
             }
         }
         
-        // Remove satellites that are no longer visible from both set and queue
+        // Remove satellites no longer visible
         std::set<uint32_t> visibleSatIds;
         for(const auto* sat : visibleSats) {
             visibleSatIds.insert(sat->getID());
@@ -73,7 +79,7 @@ public:
             }
         }
         
-        // Clean queue of non-visible satellites (fix queue/set drift)
+        // Clean queue of non-visible satellites
         std::queue<uint32_t> cleanQueue;
         while(!gndId2SatQueue[groundStationId].empty()) {
             uint32_t satId = gndId2SatQueue[groundStationId].front();
@@ -85,57 +91,49 @@ public:
         gndId2SatQueue[groundStationId] = cleanQueue;
         
         // Process queue to find next satellite with buffered data
-        cote::Satellite* fallbackSat = nullptr;  // For maintaining connection when no data available
+        cote::Satellite* fallbackSat = nullptr;
         
-        // Track satellites we've already checked in this round to prevent infinite loops
         std::set<uint32_t> checkedSats;
         
         while(!gndId2SatQueue[groundStationId].empty()) {
             uint32_t frontSatId = gndId2SatQueue[groundStationId].front();
             gndId2SatQueue[groundStationId].pop();
             
-            // If we've already checked this satellite in this round, skip to avoid infinite loop
             if(checkedSats.count(frontSatId)) {
                 continue;
             }
             checkedSats.insert(frontSatId);
             
-            // Find the satellite object
             for(const auto* sat : visibleSats) {
                 if(sat->getID() == frontSatId) {
-                    // Always consider this satellite as potential fallback
                     if(fallbackSat == nullptr) {
                         fallbackSat = const_cast<cote::Satellite*>(sat);
                     }
                     
-                    // Check if satellite is occupied by another ground station
                     if(satId2Occupied.count(frontSatId) && satId2Occupied.at(frontSatId)) {
-                        // Requeue occupied satellite for later attempts
                         gndId2SatQueue[groundStationId].push(frontSatId);
-                        break; // Skip to next satellite
+                        break;
                     }
                     
                     const uint64_t BUF = satId2Sensor.at(frontSatId)->getBitsBuffered();
                     if(BUF > 0) {
-                        // Re-add satellite to end of queue for true round-robin behavior
+                        // Re-add to end for round-robin
                         gndId2SatQueue[groundStationId].push(frontSatId);
+                        gndId2ConnectStep[groundStationId] = stepCount;
                         return const_cast<cote::Satellite*>(sat);
                     } else {
-                        // Satellite has no data - requeue it for later consideration
                         gndId2SatQueue[groundStationId].push(frontSatId);
-                        // fallbackSat already set above
                     }
                     break;
                 }
             }
         }
         
-        // Fallback: maintain connection even when no data available
         if(fallbackSat != nullptr) {
+            gndId2ConnectStep[groundStationId] = stepCount;
             return fallbackSat;
         }
         
-        // If current satellite is still visible but queue is empty, maintain connection
         if(currentSat != nullptr) {
             bool currentSatVisible = false;
             for(const auto* sat : visibleSats) {
@@ -145,7 +143,8 @@ public:
                 }
             }
             if(currentSatVisible) {
-                return currentSat; // Maintain connection to avoid flickering
+                gndId2ConnectStep[groundStationId] = stepCount;
+                return currentSat;
             }
         }
         

@@ -15,10 +15,12 @@ echo "Total: $TOTAL"
 echo "========================================"
 echo ""
 
-for analysis_dir in constellation_analysis_*; do
+for analysis_dir in results/*/constellation_analysis_*; do
+    [[ -d "$analysis_dir" ]] || continue
+    dir_name=$(basename "$analysis_dir")
     # Extract image_size and sat_count from directory name
     # Format: constellation_analysis_YYYYMMDD_HHMMSS_IMAGESIZE_SATCOUNT
-    if [[ $analysis_dir =~ _([0-9]+)_([0-9]+)$ ]]; then
+    if [[ $dir_name =~ _([0-9]+)_([0-9]+)$ ]]; then
         image_size="${BASH_REMATCH[1]}"
         sat_count="${BASH_REMATCH[2]}"
         
@@ -32,7 +34,7 @@ for analysis_dir in constellation_analysis_*; do
             fi
             
             # Generate for each policy
-            for policy in fifo sticky random roundrobin mindistance maxdownload; do
+            for policy in fifo sticky random roundrobin mindistance maxdownload geobin; do
                 CURRENT=$((CURRENT + 1))
                 
                 # Check if output file already exists (compressed)

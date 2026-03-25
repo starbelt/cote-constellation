@@ -19,7 +19,6 @@ public:
         uint32_t leadSatId,
         const std::vector<cote::Satellite>& satellites
     ) override {
-        // Original bent-pipe logic: trigger when distance exceeds threshold
         return distanceKm >= thresholdKm;
     }
 
@@ -31,7 +30,6 @@ public:
         const cote::DateTime& dateTime,
         cote::Log& log
     ) override {
-        // Original bent-pipe logic: all satellites trigger sense simultaneously
         log.evnt(cote::LogLevel::INFO, dateTime.toString(), "trigger-time");
         for(size_t i = 0; i < satellites.size(); i++) {
             satId2Sensor[satellites.at(i).getID()]->triggerSense();
@@ -46,8 +44,6 @@ public:
         const cote::DateTime& dateTime,
         std::map<uint32_t, cote::Sensor*>& satId2Sensor
     ) override {
-        // Bent-pipe strategy doesn't need frame state updates
-        // All satellites always trigger together
     }
 
     std::string getStrategyName() const override {

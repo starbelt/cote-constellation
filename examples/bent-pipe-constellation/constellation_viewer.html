@@ -165,44 +165,18 @@
             display: none;
         }
         
-        .hide-btn {
-            position: absolute;
-            top: 5px;
-            right: 28px;
+        .panel-btn {
+            position: absolute; top: 5px;
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            cursor: pointer;
-            padding: 2px 8px;
-            font-size: 14px;
-            border-radius: 3px;
-            transition: all 0.2s;
-            line-height: 1;
+            color: white; cursor: pointer;
+            font-size: 14px; border-radius: 3px;
+            transition: all 0.2s; line-height: 1;
         }
-        
-        .hide-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-        }
-        
-        .close-panel-btn {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            cursor: pointer;
-            padding: 2px 6px;
-            font-size: 14px;
-            border-radius: 3px;
-            transition: all 0.2s;
-            line-height: 1;
-        }
-        
-        .close-panel-btn:hover {
-            background: rgba(255, 0, 0, 0.3);
-            color: #ff6666;
-        }
+        .hide-btn { right: 28px; padding: 2px 8px; }
+        .hide-btn:hover { background: rgba(255, 255, 255, 0.2); }
+        .close-panel-btn { right: 5px; padding: 2px 6px; }
+        .close-panel-btn:hover { background: rgba(255, 0, 0, 0.3); color: #ff6666; }
         
         .panel-content.hidden {
             display: none;
@@ -292,6 +266,33 @@
             display: none;
             z-index: 2000;
         }
+
+        .select-control {
+            width: 100%; padding: 8px;
+            background: rgba(50, 50, 50, 0.8); color: white;
+            border: 1px solid #444; border-radius: 4px; font-size: 11px;
+        }
+
+        .btn-load {
+            width: 100%; padding: 12px;
+            background: #00ff00; color: #000; border: none;
+            border-radius: 4px; font-size: 13px; font-weight: bold;
+            cursor: pointer; transition: all 0.2s;
+        }
+
+        .btn-action {
+            width: 100%; padding: 8px;
+            border: 1px solid; border-radius: 4px;
+            color: white; cursor: pointer; font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .checkbox-row {
+            color: white; display: flex; align-items: center;
+            gap: 8px; cursor: pointer; margin-top: 8px;
+        }
+        .checkbox-row:first-child { margin-top: 0; }
+        .checkbox-row input { width: 18px; height: 18px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -299,8 +300,8 @@
     <div id="loadingIndicator">Loading...</div>
     
     <div id="dataPanel">
-        <button class="hide-btn" onclick="togglePanel('dataPanel')">─</button>
-        <button class="close-panel-btn" onclick="document.getElementById('dataPanel').style.display='none'">×</button>
+        <button class="panel-btn hide-btn" onclick="togglePanel('dataPanel')">─</button>
+        <button class="panel-btn close-panel-btn" onclick="document.getElementById('dataPanel').style.display='none'">×</button>
         <h3 id="queueTitle">QUEUE</h3>
         <div id="queueContainer" class="queue-container panel-content">
             <div class="queue-empty">No satellites in view</div>
@@ -314,14 +315,14 @@
     </div>
     
     <div id="controlPanel">
-        <button class="hide-btn" onclick="togglePanel('controlPanel')">─</button>
-        <button class="close-panel-btn" onclick="document.getElementById('controlPanel').style.display='none'">×</button>
+        <button class="panel-btn hide-btn" onclick="togglePanel('controlPanel')">─</button>
+        <button class="panel-btn close-panel-btn" onclick="document.getElementById('controlPanel').style.display='none'">×</button>
         <h3>🛰️ Constellation Viewer</h3>
         <div class="panel-content">
         
         <div class="control-group">
             <label>Spacing Strategy:</label>
-            <select id="spacingSelect" style="width: 100%; padding: 8px; background: rgba(50, 50, 50, 0.8); color: white; border: 1px solid #444; border-radius: 4px; font-size: 11px;">
+            <select id="spacingSelect" class="select-control">
                 <option value="orbit-spaced">Orbit Spaced</option>
                 <option value="close-orbit-spaced" selected>Close-Orbit Spaced</option>
                 <option value="close-spaced">Close Spaced</option>
@@ -331,19 +332,20 @@
         
         <div class="control-group">
             <label>Link Policy:</label>
-            <select id="policySelect" style="width: 100%; padding: 8px; background: rgba(50, 50, 50, 0.8); color: white; border: 1px solid #444; border-radius: 4px; font-size: 11px;">
+            <select id="policySelect" class="select-control">
                 <option value="sticky" selected>Sticky</option>
                 <option value="fifo">FIFO</option>
                 <option value="random">Random</option>
                 <option value="roundrobin">Round Robin</option>
                 <option value="mindistance">Min Distance</option>
                 <option value="maxdownload">Max Download</option>
+                <option value="geobin">GeoBin</option>
             </select>
         </div>
         
         <div class="control-group">
             <label>Constellation Size:</label>
-            <select id="sizeSelect" style="width: 100%; padding: 8px; background: rgba(50, 50, 50, 0.8); color: white; border: 1px solid #444; border-radius: 4px; font-size: 11px;">
+            <select id="sizeSelect" class="select-control">
                 <option value="01">1 Satellite</option>
                 <option value="15">15 Satellites</option>
                 <option value="25">25 Satellites</option>
@@ -355,7 +357,7 @@
         
         <div class="control-group">
             <label>Image Size:</label>
-            <select id="imagesizeSelect" style="width: 100%; padding: 8px; background: rgba(50, 50, 50, 0.8); color: white; border: 1px solid #444; border-radius: 4px; font-size: 11px;">
+            <select id="imagesizeSelect" class="select-control">
                 <option value="0">27 KB</option>
                 <option value="1">279 KB</option>
                 <option value="2">2.8 MB</option>
@@ -366,42 +368,22 @@
         </div>
         
         <div class="control-group">
-            <button onclick="loadCZML()" style="width: 100%; padding: 12px; background: #00ff00; color: #000; border: none; border-radius: 4px; font-size: 13px; font-weight: bold; cursor: pointer; transition: all 0.2s;">
+            <button onclick="loadCZML()" class="btn-load">
                 Load Visualization
             </button>
         </div>
         
         <div class="control-group">
             <label>Display Options:</label>
-            <div class="button-row">
-                <label style="color: white; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="checkbox" id="toggleLabels" onchange="toggleSatelliteLabels()" style="width: 18px; height: 18px; cursor: pointer;">
-                    <span>Show Labels</span>
-                </label>
-            </div>
-            <div class="button-row" style="margin-top: 8px;">
-                <label style="color: white; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="checkbox" id="toggleConnInfo" checked onchange="toggleConnectionInfo()" style="width: 18px; height: 18px; cursor: pointer;">
-                    <span>Show Connected Sat Info</span>
-                </label>
-            </div>
-            <div class="button-row" style="margin-top: 8px;">
-                <label style="color: white; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="checkbox" id="toggleLines" checked onchange="toggleConnectionLines()" style="width: 18px; height: 18px; cursor: pointer;">
-                    <span>Show Lines</span>
-                </label>
-            </div>
-            <div class="button-row" style="margin-top: 8px;">
-                <label style="color: white; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="checkbox" id="toggleConnDots" checked onchange="toggleConnectedDots()" style="width: 18px; height: 18px; cursor: pointer;">
-                    <span>Show Green Dots</span>
-                </label>
-            </div>
+            <label class="checkbox-row"><input type="checkbox" id="toggleLabels" onchange="toggleSatelliteLabels()"> Show Labels</label>
+            <label class="checkbox-row"><input type="checkbox" id="toggleConnInfo" checked onchange="toggleConnectionInfo()"> Show Connected Sat Info</label>
+            <label class="checkbox-row"><input type="checkbox" id="toggleLines" checked onchange="toggleConnectionLines()"> Show Lines</label>
+            <label class="checkbox-row"><input type="checkbox" id="toggleConnDots" checked onchange="toggleConnectedDots()"> Show Green Dots</label>
         </div>
         
         <div class="control-group">
-            <button onclick="resetView()" style="width: 100%; padding: 8px; background: rgba(0, 150, 255, 0.3); border: 1px solid rgba(0, 150, 255, 0.6); color: white; cursor: pointer; border-radius: 4px; font-size: 12px; transition: all 0.2s; margin-bottom: 6px;">Reset View</button>
-            <button onclick="zoomToLeadSat()" style="width: 100%; padding: 8px; background: rgba(0, 255, 100, 0.3); border: 1px solid rgba(0, 255, 100, 0.6); color: white; cursor: pointer; border-radius: 4px; font-size: 12px; transition: all 0.2s;">Zoom to Lead Sat</button>
+            <button onclick="resetView()" class="btn-action" style="background:rgba(0,150,255,0.3);border-color:rgba(0,150,255,0.6);margin-bottom:6px">Reset View</button>
+            <button onclick="zoomToLeadSat()" class="btn-action" style="background:rgba(0,255,100,0.3);border-color:rgba(0,255,100,0.6)">Zoom to Lead Sat</button>
         </div>
         
         <div id="infoDisplay">
@@ -413,7 +395,9 @@
     </div>
     
     <script>
-        console.log('Script loading - START');
+        // ── Cesium Ion access token ──────────────────────────────────────
+        // Get a free token at https://ion.cesium.com/tokens
+        // Replace the value below with your own token.
         Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI4ZjgyZTc0NS1hOWNmLTQxYmYtODhmMS02OTU1ZGNhZDA1MTgiLCJpZCI6MzU3NjA5LCJpYXQiOjE3NjIzOTE0Mjd9.9kVa3Qr5pSonJdf9-XgSPnRy37JF_uopibsv4FcPB5U';
         // Initialize Cesium viewer (following CASMA demo approach)
         const viewer = new Cesium.Viewer('cesiumContainer', {
@@ -437,7 +421,6 @@
         controller.maximumZoomDistance = 50000000; // Max zoom out distance
         
         // Reduce zoom sensitivity for finer control
-        const originalZoomFactor = controller.zoomEventTypes;
         viewer.camera.defaultZoomAmount = 1000; // Much smaller zoom increment
         
         // Override zoom behavior for mouse wheel
@@ -580,13 +563,11 @@
         }
         
         let currentDataSource = null;
-        let queueListenerSetup = false; // Track if listener is already set up
-        let debugCount = 0;
-        let originalPolylineShows = new Map(); // Store original polyline show properties
+        let queueListenerSetup = false;
+        let originalPolylineShows = new Map();
         
         // Load CZML function
         async function loadCZML() {
-            console.log('loadCZML function called!');
             // Get values from dropdowns
             const spacing = document.getElementById('spacingSelect').value;
             const policy = document.getElementById('policySelect').value;
@@ -599,8 +580,6 @@
             
             // Dynamically construct filename: {spacing}_{policy}_{size}sats_{imagesize}.czml.gz
             const filename = `cesium_output/${spacing}_${policy}_${size}sats_${imageSizeCode}.czml.gz`;
-            
-            console.log('Loading compressed CZML:', filename);
             
             document.getElementById('loadingIndicator').style.display = 'block';
             document.getElementById('status').textContent = 'Loading...';
@@ -681,18 +660,8 @@
                         // Build queue: satellites in view, sorted by ID
                         const queue = [];
                         
-                        // Debug first few ticks
-                        if (debugCount < 5) {
-                            console.log('=== QUEUE DEBUG ===');
-                            console.log('Clock time:', clock.currentTime.toString());
-                            console.log('DataSource entities:', entities.length);
-                            debugCount++;
-                        }
-                        
                         // Build queue: only show satellites that are IN VIEW
                         let inViewCount = 0;
-                        let withBufferCount = 0;
-                        let addedToQueueCount = 0;
                         
                         const showConnInfo = document.getElementById('toggleConnInfo').checked;
                         const showLabels = document.getElementById('toggleLabels').checked;
@@ -718,51 +687,24 @@
                                     }
                                     
                                     if (inView && buffer) {
-                                        // Use current time directly - CZML intervals now overlap to prevent gaps
                                         const inViewValue = inView.getValue(clock.currentTime);
                                         const bufferValue = buffer.getValue(clock.currentTime);
                                         const connectedValue = isConnected ? isConnected.getValue(clock.currentTime) : false;
                                         
-                                        // Track stats for debugging
                                         if (inViewValue === true) inViewCount++;
-                                        if (bufferValue !== undefined && bufferValue !== null) withBufferCount++;
                                         
-                                        // Show satellites that are in view (regardless of buffer amount)
-                                        // This shows the full picture of what's visible from ground station
                                         if (inViewValue === true && bufferValue !== undefined && bufferValue !== null) {
                                             const satNum = entity.name.split(' ')[1];
-                                            
-                                            queue.push({
-                                                id: satNum,
-                                                buffer: bufferValue,
-                                                connected: connectedValue
-                                            });
-                                            addedToQueueCount++;
-                                            
-                                            if (debugCount < 5 && queue.length <= 3) {
-                                                console.log(`  -> Sat ${satNum}: buf=${bufferValue.toFixed(3)}MB, conn=${connectedValue}`);
-                                            }
+                                            queue.push({ id: satNum, buffer: bufferValue, connected: connectedValue });
                                         }
                                     }
                                 } catch (e) {
-                                    if (debugCount < 20) {
-                                        console.error('Error reading properties:', e.message, entity.id);
-                                    }
+                                    // Skip entities with property read errors
                                 }
                             }
                         }
                         
-                        // Debug when queue is empty but satellites should be visible
-                        if (queue.length === 0 && debugCount < 30) {
-                            console.log(`⚠️ EMPTY QUEUE: inView=${inViewCount}, withBuffer=${withBufferCount}, added=${addedToQueueCount}, entities=${entities.length}`);
-                        }
-                        
-                        // Sort by ID
                         queue.sort((a, b) => a.id.localeCompare(b.id));
-                        
-                        if (debugCount < 15) {
-                            console.log('Queue length:', queue.length);
-                        }
                         
                         // Update display (only when there's an actual change)
                         if (queue.length === 0) {
@@ -936,12 +878,8 @@
             }
         }
         
-        // Toggle connection info display (elevation and distance)
-        // Toggle connection info display (elevation and distance)
-        function toggleConnectionInfo() {
-            // The queue display will automatically update on next tick
-            // No need to force update here, it will refresh within 1 second
-        }
+        // Toggle connection info — queue auto-refreshes on next tick
+        function toggleConnectionInfo() { }
         
         function toggleConnectionLines() {
             const showLines = document.getElementById('toggleLines').checked;
@@ -986,8 +924,6 @@
         }
         
         // Don't auto-load on page load - wait for user to click "Load Visualization"
-        // loadCZML();
-        console.log('Script loading - END. loadCZML defined:', typeof loadCZML);
     </script>
 </body>
 </html>

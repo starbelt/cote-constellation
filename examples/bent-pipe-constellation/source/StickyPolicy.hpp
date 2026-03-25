@@ -31,19 +31,15 @@ public:
             }
         }
         
-        cote::Satellite* bestSat = nullptr;
-        uint64_t bestSatBuffer = 0;
-        
         for(const auto* sat : visibleSats) {
             const uint32_t SAT_ID = sat->getID();
             const uint64_t BUF = satId2Sensor.at(SAT_ID)->getBitsBuffered();
             
-            if(!satId2Occupied.at(SAT_ID) && BUF > bestSatBuffer) {
-                bestSat = const_cast<cote::Satellite*>(sat);
-                bestSatBuffer = BUF;
+            if(!satId2Occupied.at(SAT_ID) && BUF > 0) {
+                return const_cast<cote::Satellite*>(sat);
             }
         }
         
-        return bestSat;
+        return nullptr;
     }
 };

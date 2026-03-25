@@ -15,6 +15,7 @@
 #include <algorithm>         // sort
 #include <cmath>             // round
 #include <cstdlib>           // exit, EXIT_SUCCESS
+#include <deque>             // deque
 #include <filesystem>        // path
 #include <fstream>           // ifstream
 #include <iomanip>           // setw, setfill
@@ -42,6 +43,10 @@
 #include "SpacingFactory.hpp" // Spacing strategies
 #include "CloseOrbitSpacedStrategy.hpp" // For cluster initialization
 #include "VisibilityLogger.hpp" // Visibility logging utility
+#include "ImageMetadata.hpp" // Image metadata structure
+
+// Forward declaration for policy-specific operations
+class GeoBinPolicy;
 
 int main(int argc, char** argv) {
   // Set up variables
@@ -116,6 +121,11 @@ int main(int argc, char** argv) {
   
   // Set up visibility logger
   VisibilityLogger visibilityLogger(logDirectory);
+  
+  // Completion log: records EVERY image completion (not just first per timestep)
+  // This is essential for accurate heatmaps since multiple images can complete per step.
+  std::ofstream completionLog(logDirectory / "image_completions.csv");
+  completionLog << "time,sat_id,lat,lon,bin_id,bin_count" << std::endl;
   
   // Set up date and time
   std::ifstream dateTimeHandle(dateTimeFile.string());
@@ -295,6 +305,21 @@ int main(int argc, char** argv) {
   std::map<uint32_t, uint64_t> satId2DownloadedBits; // Track downloaded bits per timestep
   uint32_t currentDecisionInterval = 0; // Track decision interval number
   std::map<uint32_t, std::vector<uint32_t>> gndId2PrevInViewSet; // Previous in-view satellite IDs
+  
+  // Image queue tracking - maintains list of all buffered images per satellite
+  // Using deque instead of queue to allow random access and selective removal
+  std::map<uint32_t, std::deque<ImageMetadata>> satId2ImageQueue;
+  
+  // Track completed image for this timestep (reset each step)
+  std::map<uint32_t, bool> satId2ImageCompleted;
+  std::map<uint32_t, double> satId2CompletedImageLat;
+  std::map<uint32_t, double> satId2CompletedImageLon;
+  std::map<uint32_t, std::string> satId2CompletedImageTimestamp;
+  
+  // Track downloaded image lat/lon for THIS timestep (includes partials)
+  std::map<uint32_t, double> satId2DownloadedImageLat;
+  std::map<uint32_t, double> satId2DownloadedImageLon;
+  
   for(size_t i=0; i<satellites.size(); i++) {
     uint32_t id = satellites.at(i).getID();
     satId2ImageTaken[id] = false;
@@ -304,6 +329,11 @@ int main(int argc, char** argv) {
     satId2PrevInView[id] = false;
     satId2PrevConnected[id] = false;
     satId2DownloadedBits[id] = 0;
+    satId2ImageQueue[id] = std::deque<ImageMetadata>(); // Initialize empty deque
+    satId2ImageCompleted[id] = false;
+    satId2CompletedImageLat[id] = 0.0;
+    satId2CompletedImageLon[id] = 0.0;
+    satId2CompletedImageTimestamp[id] = "";
   }
   for(size_t i=0; i<groundStations.size(); i++) {
     gndId2PrevInViewSet[groundStations.at(i).getID()] = std::vector<uint32_t>();
@@ -326,7 +356,14 @@ int main(int argc, char** argv) {
     downlinks.clear();
     //// Reset downloaded bits for this timestep
     for(size_t i=0; i<satellites.size(); i++) {
-      satId2DownloadedBits[satellites.at(i).getID()] = 0;
+      uint32_t id = satellites.at(i).getID();
+      satId2DownloadedBits[id] = 0;
+      satId2ImageCompleted[id] = false;
+      satId2CompletedImageLat[id] = 0.0;
+      satId2CompletedImageLon[id] = 0.0;
+      satId2CompletedImageTimestamp[id] = "";
+      satId2DownloadedImageLat[id] = 0.0;
+      satId2DownloadedImageLon[id] = 0.0;
     }
     //// Get the current time
     const double JD = cote::util::calcJulianDayFromYMD(
@@ -411,7 +448,8 @@ int main(int argc, char** argv) {
       cote::Satellite* previousSat = gndId2CurrSat[GND_ID];
       cote::Satellite* selectedSat = policy->makeSchedulingDecision(
         gndId2VisSats[GND_ID], satId2Sensor, satId2Occupied, dateTime, GND_ID,
-        gndId2CurrSat[GND_ID], stepCount, &groundStations.at(i), satId2BitrateMbps
+        gndId2CurrSat[GND_ID], stepCount, &groundStations.at(i), satId2BitrateMbps,
+        satId2ImageQueue
       );
       
       if(selectedSat != previousSat) {
@@ -440,6 +478,100 @@ int main(int argc, char** argv) {
         ));
         uint64_t bitsDrained = satId2Sensor[SAT_ID]->drainBuffer(bitsToDrain);
         satId2DownloadedBits[SAT_ID] = bitsDrained;
+        
+        // GeoBin: Reorder queue for diversity before downloading
+        if(policy->getPolicyName() == "GeoBin") {
+          GeoBinPolicy* geobin = dynamic_cast<GeoBinPolicy*>(policy.get());
+          if(geobin && !satId2ImageQueue[SAT_ID].empty()) {
+            const ImageMetadata& frontImage = satId2ImageQueue[SAT_ID].front();
+            if(frontImage.sizeBits < frontImage.originalSizeBits) {
+              geobin->notifyImageStarted(SAT_ID);
+            }
+            double bitrateBps = 0.0;
+            if(satId2BitrateMbps.count(SAT_ID)) {
+              bitrateBps = satId2BitrateMbps.at(SAT_ID) * 1.0e6;
+            }
+            double remainingSec = 0.0;
+            if(bitrateBps > 0.0) {
+              remainingSec = geobin->estimateRemainingPassSeconds(
+                gndId2CurrSat[GND_ID], &groundStations.at(i), JD, SEC, NS
+              );
+            }
+            geobin->reorderQueueForDiversity(
+              satId2ImageQueue[SAT_ID], bitrateBps, remainingSec
+            );
+            // Reserve front image's bin to prevent cross-satellite TOCTOU race
+            if(!satId2ImageQueue[SAT_ID].empty()) {
+              const auto& rsvFront = satId2ImageQueue[SAT_ID].front();
+              geobin->reserveDownload(SAT_ID, rsvFront.captureLat, rsvFront.captureLon);
+            }
+          }
+        }
+
+        // Remove completed images from queue (FIFO order by default, GeoBin reordered above)
+        uint64_t bitsRemaining = bitsDrained;
+        bool firstCompletion = true;
+        while(bitsRemaining > 0 && !satId2ImageQueue[SAT_ID].empty()) {
+          ImageMetadata& frontImage = satId2ImageQueue[SAT_ID].front();
+          
+          // Track which image is being downloaded (partial or complete)
+          satId2DownloadedImageLat[SAT_ID] = frontImage.captureLat;
+          satId2DownloadedImageLon[SAT_ID] = frontImage.captureLon;
+          
+          if(bitsRemaining >= frontImage.sizeBits) {
+            // Fully download this image - record first completion for visibility log
+            if(firstCompletion) {
+              satId2ImageCompleted[SAT_ID] = true;
+              satId2CompletedImageLat[SAT_ID] = frontImage.captureLat;
+              satId2CompletedImageLon[SAT_ID] = frontImage.captureLon;
+              satId2CompletedImageTimestamp[SAT_ID] = frontImage.timestamp;
+              firstCompletion = false;
+            }
+            
+            // Notify GeoBin policy of completed image for bin tracking
+            if(policy->getPolicyName() == "GeoBin") {
+              GeoBinPolicy* geobin = dynamic_cast<GeoBinPolicy*>(policy.get());
+              if(geobin) {
+                geobin->notifyImageCompleted(frontImage.captureLat, frontImage.captureLon, SAT_ID);
+              }
+            }
+            // Log EVERY completion to the dedicated completion file
+            {
+              double t = static_cast<double>(stepCount) * totalStepInSec;
+              int blat = static_cast<int>(std::floor((frontImage.captureLat + 90.0) / 1.0));
+              int blon = static_cast<int>(std::floor((frontImage.captureLon + 180.0) / 1.0));
+              if(blat < 0) blat = 0; if(blat > 179) blat = 179;
+              if(blon < 0) blon = 0; if(blon > 359) blon = 359;
+              int bid = blat * 360 + blon;
+              completionLog << t << "," << SAT_ID << ","
+                            << frontImage.captureLat << "," << frontImage.captureLon << ","
+                            << bid << ",0" << std::endl;
+            }
+            bitsRemaining -= frontImage.sizeBits;
+            satId2ImageQueue[SAT_ID].pop_front(); // Remove from front (FIFO)
+            
+            // ★ CRITICAL: Reorder queue BETWEEN completions so spill-over bits
+            // go to the geo-best next image, not the FIFO-next one.
+            // Without this, the pre-loop reorder is permanently blocked by the
+            // sticky-on-partial guard (spill-over always makes next image partial).
+            if(bitsRemaining > 0 && !satId2ImageQueue[SAT_ID].empty()) {
+              if(policy->getPolicyName() == "GeoBin") {
+                GeoBinPolicy* geobin = dynamic_cast<GeoBinPolicy*>(policy.get());
+                if(geobin) {
+                  geobin->reorderQueueForDiversity(satId2ImageQueue[SAT_ID]);
+                  if(!satId2ImageQueue[SAT_ID].empty()) {
+                    const auto& spillFront = satId2ImageQueue[SAT_ID].front();
+                    geobin->reserveDownload(SAT_ID, spillFront.captureLat, spillFront.captureLon);
+                  }
+                }
+              }
+            }
+          } else {
+            // Partially download this image (reduce its size)
+            frontImage.sizeBits -= bitsRemaining;
+            bitsRemaining = 0;
+          }
+        }
       }
     }
     //// Sensor data collection logic
@@ -501,9 +633,27 @@ int main(int argc, char** argv) {
         );
         const uint32_t NS_IMG = dateTime.getNanosecond();
         
-        satId2ImageLat[id] = cote::util::calcSubpointLatitude(satPosn);
-        satId2ImageLon[id] = cote::util::calcSubpointLongitude(JD_IMG, SEC_IMG, NS_IMG, satPosn);
+        double lat_deg = cote::util::calcSubpointLatitude(satPosn);
+        double lon_deg = cote::util::calcSubpointLongitude(JD_IMG, SEC_IMG, NS_IMG, satPosn);
+        
+        satId2ImageLat[id] = lat_deg;
+        satId2ImageLon[id] = lon_deg;
         satId2ImageTimestamp[id] = dateTime.toString();
+        
+        // Add image to satellite's queue ONLY if the sensor buffer has room.
+        // If the buffer is full, sensor->update() will discard the data, so
+        // adding metadata to the queue creates "ghost" images that desynchronize
+        // the queue from the buffer and corrupt bin-count diversity tracking.
+        ImageMetadata img;
+        img.captureLat = lat_deg;
+        img.captureLon = lon_deg;
+        img.timestamp = dateTime.toString();
+        img.sizeBits = satId2Sensor[id]->getBitsPerSense();
+        img.originalSizeBits = satId2Sensor[id]->getBitsPerSense();
+        if(satId2Sensor[id]->getBitsBuffered() + img.sizeBits
+           <= satId2Sensor[id]->getMaxBufferCapacity()) {
+          satId2ImageQueue[id].push_back(img);
+        }
       }
     } else {
       // Reset image taken flags when no observation
@@ -652,12 +802,22 @@ int main(int argc, char** argv) {
             }
           }
           
-          // Write to visibility log
+          // Write to visibility log with completed image data
+          int imageCompleted = satId2ImageCompleted[SAT_ID] ? 1 : 0;
+          double completedLat = satId2CompletedImageLat[SAT_ID];
+          double completedLon = satId2CompletedImageLon[SAT_ID];
+          std::string completedTimestamp = satId2CompletedImageTimestamp[SAT_ID];
+          
+          // Get downloaded image location (tracks ALL downloads, partial or complete)
+          double downloadedLat = satId2DownloadedImageLat[SAT_ID];
+          double downloadedLon = satId2DownloadedImageLon[SAT_ID];
+          
           visibilityLogger.writeEntry(
             simTimeSeconds, SAT_ID, (inView ? 1 : 0), (connected ? 1 : 0),
             bufferMB, downloadedMB, (imageTaken ? 1 : 0),
             latDeg, lonDeg, timestamp, distanceKm, elevationDeg, currentDecisionInterval,
-            bitrateMbps
+            bitrateMbps, imageCompleted, completedLat, completedLon, completedTimestamp,
+            downloadedLat, downloadedLon
           );
         }
         

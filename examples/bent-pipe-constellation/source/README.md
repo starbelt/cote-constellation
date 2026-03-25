@@ -24,6 +24,21 @@ A randomized scheduler that selects satellites pseudo-randomly from the availabl
 
 ### ShortestRemainingTimePolicy (SRTF)
 
+### GeoBinPolicy
+Geographic binning that prioritizes under-represented regions by reordering each satellite's queue to surface diverse images.
+
+### GeoBinV2Policy
+GeoBin with sticky-on-partial behavior to avoid abandoning partial downloads.
+
+### GeoBinFreshPolicy
+GeoBinV2 plus freshness-aware ordering within each satellite's queue.
+
+### GeoBinV3Policy
+GeoBinV2 with a high/low priority tier: select from the most under-represented bins first, then use GeoBin scoring as a tiebreaker.
+
+### GeoFreshV2Policy
+GeoBin-first, then freshness within the most under-represented bins. Avoids pure freshness bias toward polar captures.
+
 ## Key Differences: FIFO vs Round Robin
 
 The fundamental difference between these policies lies in their switching behavior:
@@ -40,4 +55,4 @@ Policies are selected via command line argument when running the simulation:
 ./bent-pipe /path/to/config/ /path/to/logs/ [policy_name]
 ```
 
-Supported policy names: `sticky`, `fifo`, `sjf`, `srtf`, `roundrobin`, `random`
+Supported policy names: `sticky`, `fifo`, `sjf`, `srtf`, `roundrobin`, `random`, `geobin`, `geobinv2`, `geobinfresh`, `geobinv3`, `geofreshv2`

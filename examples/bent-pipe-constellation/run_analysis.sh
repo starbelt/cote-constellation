@@ -37,7 +37,7 @@ PARAM_IMAGE_SIZE=${4:-""}
 RESUME_DIR=${5:-""}
 
 # Define all possible values
-ALL_POLICIES=("sticky" "fifo" "roundrobin" "random" "mindistance" "maxdownload")
+ALL_POLICIES=("sticky" "fifo" "roundrobin" "random" "mindistance" "maxdownload" "geobin")
 ALL_SAT_COUNTS=(1 15 25 50 100 200)
 ALL_SPACING_STRATEGIES=("close-spaced" "close-orbit-spaced" "frame-spaced" "orbit-spaced")
 ALL_IMAGE_SIZES=(028 280 2800 28000 280000 1024000)
@@ -69,12 +69,12 @@ if parse_list "$PARAM_POLICY" "POLICY_LIST"; then
     POLICIES=()
     for policy in "${POLICY_LIST[@]}"; do
         case "$policy" in
-            sticky|fifo|roundrobin|random|mindistance|maxdownload)
+            sticky|fifo|roundrobin|random|mindistance|maxdownload|geobin)
                 POLICIES+=("$policy")
                 ;;
             *)
                 echo "❌ Error: Invalid policy '$policy'"
-                echo "   Valid options: sticky, fifo, roundrobin, random, mindistance, maxdownload"
+                echo "   Valid options: sticky, fifo, roundrobin, random, mindistance, maxdownload, geobin"
                 echo "   Use comma-separated list: fifo,roundrobin,maxdownload"
                 exit 1
                 ;;

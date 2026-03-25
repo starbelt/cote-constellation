@@ -13,7 +13,7 @@
 VisibilityLogger::VisibilityLogger(const std::filesystem::path& logDirectory) {
   std::filesystem::path visibilityLogPath = logDirectory / "visibility_log.csv";
   visibilityLog.open(visibilityLogPath.string());
-  visibilityLog << "time,sat_id,in_view,connected,buffer_mb,downloaded_mb,image_taken,lat_deg,lon_deg,freshness_timestamp,distance_km,elevation_deg,decision_interval,bitrate_mbps\n";
+  visibilityLog << "time,sat_id,in_view,connected,buffer_mb,downloaded_mb,image_taken,lat_deg,lon_deg,freshness_timestamp,distance_km,elevation_deg,decision_interval,bitrate_mbps,image_completed,completed_image_lat,completed_image_lon,completed_image_timestamp,downloaded_image_lat,downloaded_image_lon\n";
 }
 
 VisibilityLogger::~VisibilityLogger() {
@@ -34,7 +34,13 @@ void VisibilityLogger::writeEntry(
     double distanceKm,
     double elevationDeg,
     uint32_t decisionInterval,
-    double bitrateMbps
+    double bitrateMbps,
+    int imageCompleted,
+    double completedImageLat,
+    double completedImageLon,
+    const std::string& completedImageTimestamp,
+    double downloadedImageLat,
+    double downloadedImageLon
 ) {
   visibilityLog << simTimeSeconds << ","
                << SAT_ID << ","
@@ -49,7 +55,13 @@ void VisibilityLogger::writeEntry(
                << std::fixed << std::setprecision(3) << distanceKm << ","
                << std::fixed << std::setprecision(2) << elevationDeg << ","
                << decisionInterval << ","
-               << std::fixed << std::setprecision(3) << bitrateMbps << "\n";
+               << std::fixed << std::setprecision(3) << bitrateMbps << ","
+               << imageCompleted << ","
+               << std::fixed << std::setprecision(6) << completedImageLat << ","
+               << std::fixed << std::setprecision(6) << completedImageLon << ","
+               << completedImageTimestamp << ","
+               << std::fixed << std::setprecision(6) << downloadedImageLat << ","
+               << std::fixed << std::setprecision(6) << downloadedImageLon << "\n";
 }
 
 void VisibilityLogger::close() {

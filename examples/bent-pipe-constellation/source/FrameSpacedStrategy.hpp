@@ -19,7 +19,6 @@ public:
         uint32_t leadSatId,
         const std::vector<cote::Satellite>& satellites
     ) override {
-        // Frame-spaced logic: trigger when distance exceeds threshold
         return distanceKm >= thresholdKm;
     }
 
@@ -31,10 +30,8 @@ public:
         const cote::DateTime& dateTime,
         cote::Log& log
     ) override {
-        // Consistent triggering logic: all satellites trigger simultaneously
         log.evnt(cote::LogLevel::INFO, dateTime.toString(), "trigger-time");
         
-        // Trigger ALL satellites at once (consistent with other strategies)
         for(size_t i = 0; i < satellites.size(); i++) {
             satId2Sensor[satellites.at(i).getID()]->triggerSense();
             satId2ThresholdKm[satellites.at(i).getID()] =
@@ -48,8 +45,6 @@ public:
         const cote::DateTime& dateTime,
         std::map<uint32_t, cote::Sensor*>& satId2Sensor
     ) override {
-        // Frame-spaced strategy now uses consistent triggering
-        // No special frame state management needed
     }
 
     std::string getStrategyName() const override {

@@ -3,15 +3,36 @@
 
 #include <vector>
 #include <map>
+#include <deque>
 #include <string>
 #include <Satellite.hpp>
 #include <GroundStation.hpp>
 #include <Sensor.hpp>
 #include <DateTime.hpp>
+#include "ImageMetadata.hpp"
 
 class SchedulingPolicy {
 public:
-    // Extended interface - with bitrate information for smart policies
+    // 10-parameter interface (with image queue)
+    virtual cote::Satellite* makeSchedulingDecision(
+        const std::vector<cote::Satellite*>& visibleSats,
+        const std::map<uint32_t,cote::Sensor*>& satId2Sensor,
+        const std::map<uint32_t,bool>& satId2Occupied,
+        const cote::DateTime& currentTime,
+        uint32_t groundStationId,
+        cote::Satellite* currentSat,
+        uint64_t stepCount,
+        cote::GroundStation* groundStation,
+        const std::map<uint32_t,double>& satId2BitrateMbps,
+        const std::map<uint32_t, std::deque<ImageMetadata>>& satId2ImageQueue
+    ) {
+        // Default: delegate to 9-parameter version
+        return makeSchedulingDecision(visibleSats, satId2Sensor, satId2Occupied,
+                                     currentTime, groundStationId, currentSat, stepCount,
+                                     groundStation, satId2BitrateMbps);
+    }
+    
+    // 9-parameter interface (with bitrate)
     virtual cote::Satellite* makeSchedulingDecision(
         const std::vector<cote::Satellite*>& visibleSats,
         const std::map<uint32_t,cote::Sensor*>& satId2Sensor,
@@ -23,12 +44,12 @@ public:
         cote::GroundStation* groundStation,
         const std::map<uint32_t,double>& satId2BitrateMbps
     ) {
-        // Default: call the 8-parameter version for backward compatibility
+        // Default: delegate to 8-parameter version
         return makeSchedulingDecision(visibleSats, satId2Sensor, satId2Occupied,
                                      currentTime, groundStationId, currentSat, stepCount, groundStation);
     }
     
-    // Main interface - with optional ground station parameter
+    // 8-parameter interface (with ground station)
     virtual cote::Satellite* makeSchedulingDecision(
         const std::vector<cote::Satellite*>& visibleSats,
         const std::map<uint32_t,cote::Sensor*>& satId2Sensor,
@@ -39,12 +60,12 @@ public:
         uint64_t stepCount,
         cote::GroundStation* groundStation
     ) {
-        // Default: call the old 7-parameter version for backward compatibility
+        // Default: delegate to 7-parameter version
         return makeSchedulingDecision(visibleSats, satId2Sensor, satId2Occupied,
                                      currentTime, groundStationId, currentSat, stepCount);
     }
     
-    // Legacy interface - for policies that don't need ground station
+    // 7-parameter interface (base)
     virtual cote::Satellite* makeSchedulingDecision(
         const std::vector<cote::Satellite*>& visibleSats,
         const std::map<uint32_t,cote::Sensor*>& satId2Sensor,

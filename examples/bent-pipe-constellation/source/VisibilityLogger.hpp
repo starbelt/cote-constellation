@@ -1,12 +1,3 @@
-// VisibilityLogger.hpp
-//
-// Minimal utility for visibility logging
-//
-// Written by GitHub Copilot
-// Other contributors: None
-//
-// See the top-level LICENSE file for the license.
-
 #ifndef VISIBILITY_LOGGER_HPP
 #define VISIBILITY_LOGGER_HPP
 
@@ -18,10 +9,7 @@
 
 class VisibilityLogger {
 public:
-  // Constructor - opens the log file
   VisibilityLogger(const std::filesystem::path& logDirectory);
-  
-  // Destructor - closes the log file
   ~VisibilityLogger();
   
   // Write a log entry
@@ -39,10 +27,15 @@ public:
     double distanceKm,
     double elevationDeg,
     uint32_t decisionInterval,
-    double bitrateMbps
+    double bitrateMbps,
+    int imageCompleted,
+    double completedImageLat,
+    double completedImageLon,
+    const std::string& completedImageTimestamp,
+    double downloadedImageLat,
+    double downloadedImageLon
   );
   
-  // Close the log file
   void close();
 
 private:

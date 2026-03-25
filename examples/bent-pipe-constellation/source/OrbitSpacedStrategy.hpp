@@ -19,8 +19,6 @@ public:
         uint32_t leadSatId,
         const std::vector<cote::Satellite>& satellites
     ) override {
-        // Same logic as CloseSpacedStrategy: trigger when distance exceeds threshold
-        // The orbital spacing (constellation.dat) provides the positioning difference
         return distanceKm >= thresholdKm;
     }
 
@@ -32,7 +30,6 @@ public:
         const cote::DateTime& dateTime,
         cote::Log& log
     ) override {
-        // Same triggering logic as CloseSpacedStrategy: all satellites trigger simultaneously
         log.evnt(cote::LogLevel::INFO, dateTime.toString(), "trigger-time");
         for(size_t i = 0; i < satellites.size(); i++) {
             satId2Sensor[satellites.at(i).getID()]->triggerSense();
@@ -47,8 +44,6 @@ public:
         const cote::DateTime& dateTime,
         std::map<uint32_t, cote::Sensor*>& satId2Sensor
     ) override {
-        // Same as CloseSpacedStrategy: no special frame state needed
-        // All satellites always trigger together
     }
 
     std::string getStrategyName() const override {

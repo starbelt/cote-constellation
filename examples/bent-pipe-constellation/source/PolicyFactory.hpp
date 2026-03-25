@@ -5,6 +5,7 @@
 #include <string>
 #include "SchedulingPolicy.hpp"
 #include "RandomPolicy.hpp"
+#include "GeoBinPolicy.hpp"
 #include "FIFOPolicy.hpp"
 #include "RoundRobinPolicy.hpp"
 #include "ShortestJobFirstPolicy.hpp"
@@ -19,6 +20,8 @@ public:
     static std::unique_ptr<SchedulingPolicy> createPolicy(const std::string& policyName) {
         if(policyName == "random") {
             return std::make_unique<RandomPolicy>();
+        } else if(policyName == "geobin" || policyName == "geo-bin") {
+            return std::make_unique<GeoBinPolicy>();
         } else if(policyName == "fifo") {
             return std::make_unique<FIFOPolicy>();
         } else if(policyName == "roundrobin") {
@@ -36,7 +39,6 @@ public:
         } else if(policyName == "maxdownloadpreemptive" || policyName == "max-download-preemptive" || policyName == "preemptive") {
             return std::make_unique<MaxDownloadPreemptivePolicy>();
         }
-        // Default to sticky (original bent-pipe behavior)
         return std::make_unique<StickyPolicy>();
     }
 };
